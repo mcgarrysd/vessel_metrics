@@ -18,8 +18,9 @@ import pandas as pd
 from skimage.measure import regionprops
 from skimage.measure import regionprops_table
 from copy import deepcopy
+from sklearn import svm
 
-data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_020221/hole_analysis/'
+data_path = '/home/sean/Documents/hole_analysis/'
 data_files = ['35M-59H inx 48hpf Apr 14 2019 E2.czi', '35M-59H inx 48hpf Apr 14 2019 E9.czi',\
 'flk gata 48hpf Jul 26 2019 E5.czi', 'flk gata inx 48hpf Apr 14 2019 E4.czi']
 
@@ -66,6 +67,8 @@ area = []
 perimeter = []
 fish_list = []
 seg_list = []
+inv_label_list = []
+overlap_list = []
 label_index = []
 
 for i in dir_list:
@@ -82,9 +85,12 @@ for i in dir_list:
         if stats[s,4]>50000:
             inv_label[labelled_holes == s] = 0
             labelled_holes[labelled_holes == s] =0
+    overlap = label+inv_label*2
     im_list.append(im)
     label_list.append(label)
     seg_list.append(seg)
+    inv_label_list.append(inv_label)
+    overlap_list.append(overlap)
     
     regions = regionprops(labelled_holes, im)
     for props in regions[2:]:
@@ -105,9 +111,32 @@ for i in dir_list:
         is_true.append(mode(vals))
         label_index.append(mode(label_vals))
 
-col_names = ['area','mean','max','min','eccentricity','perimeter','fish_list','is_true','index']
-df = pd.DataFrame(list(zip(area,hole_mean,region_max,region_min,eccentricity,perimeter,fish_list,is_true,label_index)),columns = col_names)
+surface_area = np.array(area)/np.array(perimeter)
 
+col_names = ['area','mean','max','min','eccentricity','perimeter','surface area', 'fish_list','is_true','index']
+df = pd.DataFrame(list(zip(area,hole_mean,region_max,region_min,eccentricity,perimeter,surface_area, fish_list,is_true,label_index)),columns = col_names)
 
-#for f in fish_list:
+clf = svm.SVC()
+
+for f in fish_list:
+    train = df[df['fish_list']!=f]
+    test = df[df['fish_list']==f]
+    data_cols = col_names[0:7]
+    train_data = train[data_cols]
+    test_data = test[data_cols]
     
+    train_label = train['is_true']
+    test_label = test['is_true']
+    
+    clf.fit(train_data,train_label)
+    predicted_labels = clf.predict(test_data)
+    
+    data_cols_reduced = ['area','mean','surface area']
+    train_reduced = train[data_cols_reduced]
+    test_reduced = test[data_cols_reduced]
+    
+    clf.fit(train_reduced, train_label)
+    predicted_reduced = clf.predict(test_reduced)
+
+
+
