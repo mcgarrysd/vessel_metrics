@@ -66,6 +66,7 @@ area = []
 perimeter = []
 fish_list = []
 seg_list = []
+label_index = []
 
 for i in dir_list:
     im = cv2.imread(data_path + i + 'img.png',0)
@@ -86,7 +87,6 @@ for i in dir_list:
     seg_list.append(seg)
     
     regions = regionprops(labelled_holes, im)
-    label_index = []
     for props in regions[2:]:
         area.append(props.area)
         hole_mean.append(props.mean_intensity)
@@ -100,8 +100,14 @@ for i in dir_list:
         vals = []
         label_vals = []
         for x,y in coords:
-            vals.append(inv_label[x,y])
+            vals.append(label[x,y])
             label_vals.append(labelled_holes[x,y])
         is_true.append(mode(vals))
         label_index.append(mode(label_vals))
 
+col_names = ['area','mean','max','min','eccentricity','perimeter','fish_list','is_true','index']
+df = pd.DataFrame(list(zip(area,hole_mean,region_max,region_min,eccentricity,perimeter,fish_list,is_true,label_index)),columns = col_names)
+
+
+#for f in fish_list:
+    
