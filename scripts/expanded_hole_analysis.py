@@ -20,7 +20,7 @@ from skimage.measure import regionprops_table
 from copy import deepcopy
 from sklearn import svm
 
-data_path = '/home/sean/Documents/hole_analysis/'
+data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_020221/hole_analysis/'
 data_files = ['35M-59H inx 48hpf Apr 14 2019 E2.czi', '35M-59H inx 48hpf Apr 14 2019 E9.czi',\
 'flk gata 48hpf Jul 26 2019 E5.czi', 'flk gata inx 48hpf Apr 14 2019 E4.czi']
 
@@ -139,4 +139,4 @@ for f in fish_list:
     predicted_reduced = clf.predict(test_reduced)
 
 
-
+# test test test
