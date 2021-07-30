@@ -189,7 +189,7 @@ def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh
     im_vector = image.reshape((-1,)).astype(np.float32)
     
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
-    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_PP_CENTERS)
     center = center.astype(np.uint8)
     label_im = label.reshape((image.shape))
     seg_im = np.zeros_like(label_im)
