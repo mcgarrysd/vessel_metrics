@@ -20,16 +20,13 @@ from skimage.measure import regionprops_table
 from copy import deepcopy
 from sklearn import svm
 
-<<<<<<< HEAD
 import time
 start_time = time.time()
 
 cv2.setRNGSeed(1)
 
 data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_020221/hole_analysis/'
-=======
-data_path = '/home/sean/Documents/hole_analysis/'
->>>>>>> 9091b8c4dfa0cc30d9b67bb1a808f1a9d3b5f15b
+
 data_files = ['35M-59H inx 48hpf Apr 14 2019 E2.czi', '35M-59H inx 48hpf Apr 14 2019 E9.czi',\
 'flk gata 48hpf Jul 26 2019 E5.czi', 'flk gata inx 48hpf Apr 14 2019 E4.czi']
 

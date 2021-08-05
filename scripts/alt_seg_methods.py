@@ -21,7 +21,7 @@ from sklearn.cluster import KMeans
 from cv2_rolling_ball import subtract_background_rolling_ball
 import os
 
-data_path = '/home/sean/Documents/segmentation/'
+data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_042821/segmentation'
 
 data_list = []
 for file in os.listdir(data_path):
@@ -31,7 +31,7 @@ for file in os.listdir(data_path):
 
 all_jacc = []
 all_seg = []
-for r in range(50):
+for r in range(5):
     cv2.setRNGSeed(r)
     jacc_temp = []
     seg_temp = []
