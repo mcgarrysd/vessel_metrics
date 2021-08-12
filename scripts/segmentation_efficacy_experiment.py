@@ -12,17 +12,18 @@ import numpy as np
 import vessel_metrics as vm
 from czifile import CziFile
 from copy import deepcopy
+import matplotlib.pyplot as plt
 import os
 import gc
 
-image_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_042821/segmentation/images/'
-label_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_042821/segmentation/labels/'
+image_path = '/home/sean/Documents/segmentation/images/'
+label_path = '/home/sean/Documents/segmentation/labels/'
 
 jacc = []; img_list = []; label_list = []; seg_list = []
 conn_list = []; area_list = []; length_list = [];
 
 data_list = os.listdir(label_path)
-data_list = sort(data_list)
+data_list = sorted(data_list)
 train_list = data_list[0:15]
 test_list = data_list[15::]
 
@@ -64,7 +65,7 @@ for file in train_list:
     image = cv2.imread(image_path+file,0)
     label = cv2.imread(label_path+file,0)
     
-    image = vm.clahe(image)
+    #image = vm.clahe(image)
     
     img_list.append(image)
     label_list.append(label)
@@ -84,3 +85,16 @@ for file in train_list:
     jacc_b.append(jacc_temp)
     
     print(file +' completed')    
+
+thresh = []
+bin_array = np.array(bin_thresh)
+for i in range(len(jacc_b)):
+    max_inds = np.where(jacc_b[i] == max(jacc_b[i]))[0]
+    thresh.append(bin_array[max_inds])
+
+plt.figure()
+for i in range(0,4):
+    plt.scatter(bin_thresh,jacc_b[i])
+plt.xlabel('threshold value')
+plt.ylabel('jaccard')
+plt.legend(train_list[0:4])
