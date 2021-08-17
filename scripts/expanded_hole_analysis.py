@@ -25,7 +25,7 @@ start_time = time.time()
 
 cv2.setRNGSeed(1)
 
-data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_020221/hole_analysis/'
+data_path = '/home/sean/Documents/hole_analysis/'
 
 data_files = ['35M-59H inx 48hpf Apr 14 2019 E2.czi', '35M-59H inx 48hpf Apr 14 2019 E9.czi',\
 'flk gata 48hpf Jul 26 2019 E5.czi', 'flk gata inx 48hpf Apr 14 2019 E4.czi']
@@ -34,7 +34,7 @@ outpath_flag = 0
 if outpath_flag:
     outpath = '/home/sean/Documents/Calgary_postdoc/Data/jasper_020221/hole_analysis/'
     vol = vm.preprocess_czi(data_path, data_files[0])
-    vol = vm.sliding_window(vol, 4)
+    vol = vm.sliding_window(vol, 10)
     vol = vol.astype(np.uint8)
     im1 = vol[15,:,:]
     im2 = vol[10,:,:]
