@@ -296,6 +296,16 @@ def seg_holes(label):
     _, labelled_holes, stats, _ = cv2.connectedComponentsWithStats(label_inv)
     return labelled_holes, label_inv, stats
 
+def contrast_stretch(image,upper_lim = 255, lower_lim = 0):
+    c = np.percentile(image,5)
+    d = np.percentile(image,95)
+    
+    stretch = (image-c)*((upper_lim-lower_lim)/(d-c))+lower_lim
+    stretch[stretch<lower_lim] = lower_lim
+    stretch[stretch>upper_lim] = upper_lim
+    
+    return stretch
+
 
 #########################################################
 
