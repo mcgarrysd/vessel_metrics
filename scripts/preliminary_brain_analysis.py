@@ -148,3 +148,4 @@ skel_overlay = draw.overlay_skeleton_2d(mip_slice_preproc,skel,dilate = 2)
 edges, bp = vm.find_branchpoints(skel)
 _, l_edge_labels = cv2.connectedComponents(l_edges, connectivity = 8)
 l_edge_labels, l_edges = vm.remove_small_segments(l_edge_labels, 50)
+
