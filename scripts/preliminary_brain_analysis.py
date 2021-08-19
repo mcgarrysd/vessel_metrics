@@ -22,7 +22,7 @@ from skan import draw
 
 plt.close('all')
 
-data_path = '/home/sean/Documents/suchit_feb_21/'
+data_path = '/home/sean/Documents/vessel_metrics/data/suchit_feb_21/'
 file = 'emb1_Pdgfrbmc flkGFP 75 hpf.czi'
 
 volume = vm.preprocess_czi(data_path, file)
@@ -105,7 +105,7 @@ reslice10 = vm.sliding_window(volume,10)
 plt.figure(); plt.imshow(reslice10[10])
 
 reslice15 = vm.sliding_window(volume,15)
-plt.figure(); plt.imshow(reslice_15[10])
+plt.figure(); plt.imshow(reslice15[10])
 
 reslice10_nw = vm.reslice_image(volume,10)
 plt.figure(); plt.imshow(reslice10_nw[0])
@@ -143,7 +143,9 @@ new_label[overlap>1] =1
 # Testing vessel metrics on segmentation 
 skel = skeletonize(new_label)
 plt.figure(); 
-skel_overlay = draw.overlay_skeleton_2d(mip_slice_preproc,skel,dilate = 2)
+mip_stretch = contrast_stretch(mip_slice_preproc)
+skel_overlay = draw.overlay_skeleton_2d(mip_stretch.astype(np.uint8),skel,dilate = 2)
+
 
 edges, bp = vm.find_branchpoints(skel)
 _, l_edge_labels = cv2.connectedComponents(l_edges, connectivity = 8)
