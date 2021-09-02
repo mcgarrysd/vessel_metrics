@@ -23,36 +23,41 @@ from skimage.morphology import skeletonize
 plt.close('all')
 
 data_path = '/home/sean/Documents/suchit_feb_21/'
-data_files = os.listdir(data_path)
+#data_files = os.listdir(data_path)
 
-file = data_files[0]
-for file in data_files:
-    volume = vm.preprocess_czi(data_path,file)
-    for i in range(0,len(volume),5):
-        plt.figure()
-        plt.imshow(volume[i])
-
-reslice_list = []
-for file in data_files:
-    volume = vm.preprocess_czi(data_path,file)
-    slice_range = len(volume)
-    slice_thickness = np.round(slice_range/2).astype(np.uint8)
-    reslice = vm.reslice_image(volume,slice_thickness)
-    reslice_list.append(reslice)
-
-for i in reslice_list:
-    plt.figure(); plt.imshow(i[0])
+show_volumes = False
+if show_volumes:
+    file = data_files[0]
+    for file in data_files:
+        volume = vm.preprocess_czi(data_path,file)
+        for i in range(0,len(volume),5):
+            plt.figure()
+            plt.imshow(volume[i])
     
-out_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
-for file, volume in zip(data_files, reslice_list):
-    im = volume[0]
-    fish = file.split('_')[0]
-    im_name = fish + '.png'
-    cv2.imwrite(out_path +im_name, im)
+    reslice_list = []
+    for file in data_files:
+        volume = vm.preprocess_czi(data_path,file)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        reslice_list.append(reslice)
     
+    for i in reslice_list:
+        plt.figure(); plt.imshow(i[0])
+    
+save_projections = False
+if save_projections:
+    out_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
+    for file, volume in zip(data_files, reslice_list):
+        im = volume[0]
+        fish = file.split('_')[0]
+        im_name = fish + '.png'
+        cv2.imwrite(out_path +im_name, im)
+    
+data_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
 test_ims = ['emb2.png', 'emb8.png']
 for im_name in test_ims:
-    im = cv2.imread(out_path+im_name,0)
+    im = cv2.imread(data_path+im_name,0)
     label = brain_seg(im)
     plt.figure()
     plt.imshow(label)
