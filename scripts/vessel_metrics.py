@@ -307,6 +307,23 @@ def contrast_stretch(image,upper_lim = 255, lower_lim = 0):
     return stretch
 
 
+def branchpoint_density(skel, label):
+    _, bp = find_branchpoints(skel)
+    _, bp_labels = cv2.connectedComponents(bp, connectivity = 8)
+    
+    skel_inds = np.argwhere(skel > 0)
+    
+    bp_density = []
+    for i in range(0,len(skel_inds), 50):
+        x = skel_inds[i][0]; y = skel_inds[i][1]
+        this_tile = bp_labels[x-25:x+25,y-25:y+25]
+        bp_number = len(np.unique(this_tile))-1
+        bp_density.append(bp_number)
+        
+    bp_density = np.array(bp_density)
+    bp_density[bp_density<0] = 0
+    return bp_density
+
 #########################################################
 
 def crossline_endpoints(label,start,slope):    
