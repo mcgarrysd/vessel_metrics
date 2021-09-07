@@ -136,3 +136,26 @@ def overlay_segmentation(im,label, alpha = 0.5, contrast_stretch = False):
     plt.imshow(im, 'gray', interpolation = 'none')
     plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
     plt.show()
+    
+########################### mutant projections
+
+mt_path = '/home/sean/Documents/suchit_mt/'
+data_files = os.listdir(mt_path)
+
+save_projections = True
+if save_projections:
+    reslice_list = []
+    for file in data_files:
+        volume = vm.preprocess_czi(mt_path,file, channel = 1)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        reslice_list.append(reslice)
+    
+    
+    out_path = '/home/sean/Documents/vessel_metrics/data/suchit_mt_projections/'
+    for file, volume in zip(data_files, reslice_list):
+        im = volume[0]
+        fish = file.split('_')[0]
+        im_name = fish + '.png'
+        cv2.imwrite(out_path +im_name, im)

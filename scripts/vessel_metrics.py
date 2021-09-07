@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import os
 from czifile import CziFile
 from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
 
 
 def fill_holes(label_binary, hole_size):
@@ -143,12 +144,12 @@ def find_terminal_segments(skel, edge_labels):
             terminal_segments[edge_labels == u] = 1
     return terminal_segments
 
-def preprocess_czi(input_directory,file_name):
+def preprocess_czi(input_directory,file_name, channel = 0):
     with CziFile(input_directory + file_name) as czi:
         image_arrays = czi.asarray()
 
     image = np.squeeze(image_arrays)
-    im_channel = image[0,:,:,:]
+    im_channel = image[channel,:,:,:]
     im_channel = normalize_contrast(im_channel)
     return im_channel
     
@@ -324,8 +325,47 @@ def branchpoint_density(skel, label):
     bp_density[bp_density<0] = 0
     return bp_density
 
-#########################################################
 
+def overlay_segmentation(im,label, alpha = 0.5, contrast_stretch = False):
+    if contrast_stretch:
+        im = vm.contrast_stretch(im)
+        im = vm.preprocess_seg(im)
+    masked = np.ma.masked_where(label == 0, label)
+    plt.figure()
+    plt.imshow(im, 'gray', interpolation = 'none')
+    plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
+    plt.show()
+
+#########################################################
+# brain specific functions
+
+def brain_seg(im, hole_size = 50, ditzle_size = 500, sato_thresh = 60):
+    im = contrast_stretch(im)
+    im = preprocess_seg(im)
+    
+    sato_im = sato(im, sigmas = range(1,10,2), mode = 'reflect', black_ridges = False)
+    sato_norm = np.round(sato_im/np.max(sato_im)*255).astype(np.uint8)
+    
+    sato_label = np.zeros_like(sato_norm)
+    sato_label[sato_norm>sato_thresh] =1
+    
+    
+    kernel = np.ones((6,6),np.uint8)
+    label = cv2.morphologyEx(sato_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    
+    _, label = fill_holes(label.astype(np.uint8),hole_size)
+    label = remove_small_objects(label,ditzle_size)
+    
+    return label
+
+
+
+
+
+
+
+
+###############################################################
 def crossline_endpoints(label,start,slope):    
     current_point = start
     current_label_val = label[current_point[0],current_point[1]]
