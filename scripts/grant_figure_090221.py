@@ -22,7 +22,7 @@ from scipy import stats
 fiugre_path = '/home/sean/Documents/Calgary_postdoc/figures/'
 
 wt_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
-wt_names = ['emb3', 'emb8']
+wt_names = ['emb3', 'emb6', 'emb8', 'emb9']
 wt_ims = []
 wt_labels = []
 wt_seg = []
@@ -33,7 +33,7 @@ for im_name in wt_names:
     wt_seg.append(vm.brain_seg(im))
     
 mt_path = '/home/sean/Documents/vessel_metrics/data/suchit_mt_projections/'
-mt_names = ['emb5']
+mt_names = ['emb3', 'emb4', 'emb5', 'emb13','emb15']
 mt_ims = []
 mt_labels = []
 mt_seg = []
@@ -84,4 +84,14 @@ plt.figure()
 plt.boxplot([nz_wt_16[0], nz_mt_16[0]], labels = ['wild type', 'mutant'])
 
 vm.overlay_segmentation(im,density, alpha = 0.2)
+
+def crop_brain_im(im,label = None):
+    new_im = im[300:750,50:500]
+    if label is None:
+        return new_im
+    else:
+        new_label = label[300:750,50:500]
+        return new_im, label
+
+    
     

@@ -335,6 +335,23 @@ def overlay_segmentation(im,label, alpha = 0.5, contrast_stretch = False):
     plt.imshow(im, 'gray', interpolation = 'none')
     plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
     plt.show()
+    
+def vessel_density(im,label, num_tiles_x, num_tiles_y):
+    density = np.zeros_like(im).astype(np.float16)
+    density_array = []
+    label[label>0] = 1
+    step_x = np.round(im.shape[0]/num_tiles_x).astype(np.int16)
+    step_y = np.round(im.shape[1]/num_tiles_y).astype(np.int16)
+    for x in range(0,im.shape[0], step_x):
+        for y in range(0,im.shape[1], step_y):
+            tile = label[x:x+step_x-1,y:y+step_y-1]
+            numel = tile.shape[0]*tile.shape[1]
+            tile_density = np.sum(tile)/numel
+            tile_val = np.round(tile_density*1000)
+            density[x:x+step_x-1,y:y+step_y-1] = tile_val
+            density_array.append(tile_val)
+    density = density.astype(np.uint16)
+    return density, density_array
 
 #########################################################
 # brain specific functions
@@ -358,10 +375,13 @@ def brain_seg(im, hole_size = 50, ditzle_size = 500, sato_thresh = 60):
     
     return label
 
-
-
-
-
+def crop_brain_im(im,label = None):
+    new_im = im[300:750,50:500]
+    if label is None:
+        return new_im
+    else:
+        new_label = label[300:750,50:500]
+        return new_im, new_label
 
 
 
