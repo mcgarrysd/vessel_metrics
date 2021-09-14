@@ -22,47 +22,82 @@ from scipy import stats
 #######################################################################
 # Create pericyte projection
 
-data_path = '/home/sean/Documents/vessel_metrics/data/suchit_feb_21/'
+data_path = '/home/sean/Documents/suchit_feb_21/'
 data_list = os.listdir(data_path)
-reslice_list_c1 = []
-reslice_list_c0 = []
+c1_bottom_list= []
+c1_top_list = []
+c0_bottom_list= []
+c0_top_list = []
 for d in data_list:
     volume = vm.preprocess_czi(data_path,d, channel = 1)
     slice_range = len(volume)
     slice_thickness = np.round(slice_range/2).astype(np.uint8)
     reslice = vm.reslice_image(volume,slice_thickness)
-    reslice_list_c1.append(reslice[0])
+    c1_bottom_list.append(reslice[0])
+    c1_top_list.append(reslice[1])
     
     volume = vm.preprocess_czi(data_path,d, channel = 0)
     slice_range = len(volume)
     slice_thickness = np.round(slice_range/2).astype(np.uint8)
     reslice = vm.reslice_image(volume,slice_thickness)
-    reslice_list_c0.append(reslice[0])
+    c0_bottom_list.append(reslice[0])
+    c0_top_list.append(reslice[1])
     
-plt.figure();
-plt.imshow(reslice_list_c0[0])
-plt.figure(); 
-plt.imshow(reslice_list_c1[0])
-    
+plt.figure()
+plt.subplot(2,2,1)
+plt.imshow(c0_bottom_list[0])
+plt.subplot(2,2,2)
+plt.imshow(c0_top_list[0])
+plt.subplot(2,2,3)
+plt.imshow(c1_bottom_list[0])
+plt.subplot(2,2,4)
+plt.imshow(c1_top_list[0])
 
 
+peri_top = c1_top_list[0]
+peri_bottom= c1_bottom_list[0]
+vessel_top = c0_top_list[0]
+vessel_bottom = c0_bottom_list[0]
 
-wt_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
-wt_names = ['emb3', 'emb6']
-wt_ims = []
-wt_seg = []
-for im_name in wt_names:
-    im = cv2.imread(wt_path+im_name+'.png',0)
-    wt_ims.append(im)
-    wt_seg.append(vm.brain_seg(im))
-    
-mt_path = '/home/sean/Documents/vessel_metrics/data/suchit_mt_projections/'
-mt_names = ['emb3', 'emb15']
-mt_ims = []
-mt_labels = []
-mt_seg = []
-for im_name in mt_names:
-    im = cv2.imread(mt_path+im_name+'.png',0)
-    mt_ims.append(im)
-    mt_labels.append(cv2.imread(mt_path+im_name+'/label.png',0))
-    mt_seg.append(vm.brain_seg(im))
+vessel_top_seg = vm.brain_seg(vessel_top, sato_thresh = 40)
+vm.overlay_segmentation(vessel_top, vessel_top_seg, contrast_adjust=True)
+
+def crop_ventral_brain(im):
+    new_im = im[350:650,700:1000]
+    return  new_im
+
+peri_top_stretch = vm.contrast_stretch(peri_top)
+
+vtop_crop = crop_ventral_brain(vessel_top)
+vseg_crop = crop_ventral_brain(vessel_top_seg)
+peri_crop = crop_ventral_brain(peri_top_stretch)
+
+plt.imshow(peri_crop)
+
+high_vals = np.zeros_like(peri_crop)
+high_vals[peri_crop>75] = 1
+vm.overlay_segmentation(peri_crop,high_vals, alpha = 0.5)
+
+peri_seg = np.zeros_like(peri_crop)
+peri_seg[(high_vals>0) & (vseg_crop>0)]=1
+
+kernel = np.ones((3,3),np.uint8)
+peri_seg = cv2.morphologyEx(peri_seg, cv2.MORPH_OPEN, kernel)
+
+num_labels, labels = cv2.connectedComponents(peri_seg.astype(np.uint8))
+
+unique_labels = np.array(np.nonzero(np.unique(labels))).flatten()
+
+reduced_label = np.zeros_like(peri_seg)
+for u in unique_labels:
+    numel = len(np.argwhere(labels == u))
+    if numel>15 and numel<500:
+        reduced_label[labels == u] = 1
+        
+vm.overlay_segmentation(peri_crop, reduced_label, alpha = 0.9)
+
+combined_seg = np.zeros_like(peri_seg)
+combined_seg[vseg_crop>0] = 1
+combined_seg[reduced_label>0]=100
+
+vm.overlay_segmentation(vtop_crop, combined_seg, alpha = 0.3)

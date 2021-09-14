@@ -326,10 +326,10 @@ def branchpoint_density(skel, label):
     return bp_density
 
 
-def overlay_segmentation(im,label, alpha = 0.5, contrast_stretch = False):
-    if contrast_stretch:
-        im = vm.contrast_stretch(im)
-        im = vm.preprocess_seg(im)
+def overlay_segmentation(im,label, alpha = 0.5, contrast_adjust = False):
+    if contrast_adjust:
+        im = contrast_stretch(im)
+        im = preprocess_seg(im)
     masked = np.ma.masked_where(label == 0, label)
     plt.figure()
     plt.imshow(im, 'gray', interpolation = 'none')
