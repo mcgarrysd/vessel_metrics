@@ -20,7 +20,7 @@ from skimage.morphology import skeletonize
 from scipy import stats
 from scipy.spatial import distance
 
-wt_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
+wt_path = '/home/sean/Documents/suchit_wt_projections/'
 wt_names = ['emb9']
 wt_ims = []
 wt_seg = []
@@ -84,4 +84,23 @@ def segment_midpoint(segment):
     
     return segment_median
 
-def tangent_slope(segment, point)
+def tangent_slope(segment, point):
+    point = point.flatten()
+    crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+    crop_inds = np.transpose(np.where(crop_im))
+    line = cv2.fitLine(crop_inds)
+    vx, vy = line[0], line[1]
+    return
+
+def crossline_slope(vx,vy):
+    bx = -vy
+    by = vx
+    return bx,by
+
+
+def make_crossline(vx,vy,point,length):
+    x1 = np.round(vx*(point[0]-length/2))
+    x2 = np.round(vx*(point[0]+length/2))
+    
+    y1 = np.round(vy*(point[1]-length/2))
+    y2 = np.round(vy*(point[1]+length/2))
