@@ -22,7 +22,7 @@ from scipy import stats
 #######################################################################
 # Create pericyte projection
 
-data_path = '/home/sean/Documents/suchit_feb_21/'
+data_path = '/home/sean/Documents/vessel_metrics/data/suchit_feb_21/'
 data_list = os.listdir(data_path)
 c1_bottom_list= []
 c1_top_list = []
@@ -42,22 +42,24 @@ for d in data_list:
     reslice = vm.reslice_image(volume,slice_thickness)
     c0_bottom_list.append(reslice[0])
     c0_top_list.append(reslice[1])
-    
+
+
+# emb 10
 plt.figure()
 plt.subplot(2,2,1)
-plt.imshow(c0_bottom_list[0])
+plt.imshow(c0_bottom_list[7])
 plt.subplot(2,2,2)
-plt.imshow(c0_top_list[0])
+plt.imshow(c0_top_list[7])
 plt.subplot(2,2,3)
-plt.imshow(c1_bottom_list[0])
+plt.imshow(c1_bottom_list[7])
 plt.subplot(2,2,4)
-plt.imshow(c1_top_list[0])
+plt.imshow(c1_top_list[7])
 
 
-peri_top = c1_top_list[0]
-peri_bottom= c1_bottom_list[0]
-vessel_top = c0_top_list[0]
-vessel_bottom = c0_bottom_list[0]
+peri_top = c1_top_list[7]
+peri_bottom= c1_bottom_list[7]
+vessel_top = c0_top_list[7]
+vessel_bottom = c0_bottom_list[7]
 
 vessel_top_seg = vm.brain_seg(vessel_top, sato_thresh = 40)
 vm.overlay_segmentation(vessel_top, vessel_top_seg, contrast_adjust=True)
@@ -101,3 +103,39 @@ combined_seg[vseg_crop>0] = 1
 combined_seg[reduced_label>0]=100
 
 vm.overlay_segmentation(vtop_crop, combined_seg, alpha = 0.3)
+
+########################################################
+# Panels for Sarah
+
+plt.figure(); 
+plt.imshow(vessel_top, 'gray')
+plt.figure(); 
+plt.imshow(peri_top, 'gray')
+plt.figure();
+plt.imshow(vtop_crop, 'gray')
+
+plt.imshow(peri_crop)
+vm.overlay_segmentation(peri_crop, reduced_label, alpha = 0.9)
+vm.overlay_segmentation(vtop_crop, combined_seg, alpha = 0.3)
+
+# Segment length
+skel = skeletonize(vseg_crop)
+skel_overlay = skel*100+vseg_crop
+vm.overlay_segmentation(vtop_crop, skel_overlay)
+
+edges, branch_points = vm.find_branchpoints(skel)
+edges_overlay = edges*100+vseg_crop
+vm.overlay_segmentation(vtop_crop, edges_overlay)
+
+bp_overlay = edges*100+branch_points*200+vseg_crop
+vm.overlay_segmentation(vtop_crop, bp_overlay)
+
+_, edge_labels = cv2.connectedComponents(edges)
+count, segment_lengths = vm.vessel_length(edge_labels)
+
+filtered_lengths = []
+for i in segment_lengths:
+    if i>10:
+        filtered_lengths.append(i)
+        
+pericyte_labels = cv2.connectedComponents(peri_seg.astype(np.uint8))
