@@ -43,7 +43,7 @@ vm.overlay_segmentation(im_crop,skel*100+seg_crop)
 
 _, edge_labels = cv2.connectedComponents(edges)
 
-this_seg = 9
+this_seg = 29
 segment = np.zeros_like(edge_labels)
 segment[edge_labels==this_seg] = 1
 
@@ -60,7 +60,7 @@ cross_vals_seg = crossline_intensity(cross_index, seg_crop, plot=True)
 ##################################################################
 # Full vessel
 
-this_seg = 83
+this_seg = 29
 segment = np.zeros_like(edge_labels)
 segment[edge_labels==this_seg] = 1
 
@@ -197,7 +197,9 @@ def segment_midpoint(segment):
         distances.append(distance.chebyshev(first_endpoint, this_pt))
     sort_indexes = np.argsort(distances)
     sorted_distances = sorted(distances)
-    median_distance= np.where(sorted_distances == np.median(sorted_distances))[0][0]
+    median_val = np.median(sorted_distances)
+    dist_from_median = abs(sorted_distances-median_val)
+    median_distance= np.where(dist_from_median == np.min(dist_from_median))[0][0]
     segment_median = segment_indexes[np.where(distances == median_distance)]
     segment_median = segment_median.flatten()
     return segment_median
@@ -262,8 +264,6 @@ def find_crossline_length(vx,vy,point,im):
     length = diam*1.5
     return length
         
-        
-        
 def crossline_intensity(cross_index, im, plot = False):
     cross_vals = []
     for i in cross_index:
@@ -285,4 +285,128 @@ def label_diameter(cross_vals):
         diameter = 0
     return diameter
 
-shift = np.roll(cross_vals,1)
+######################################################################
+######################################################################
+    
+def vessel_diameter_verbose(edge_labels, segment_number, seg):
+    segment = np.zeros_like(edge_labels)
+    segment[edge_labels==this_seg] = 1
+    
+    #########################################################
+    
+    segment_endpoints = vm.find_endpoints(segment)
+    endpoint_index = np.where(segment_endpoints)
+    first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
+    segment_indexes = np.argwhere(segment==1)
+        
+    distances = []
+    for i in range(len(segment_indexes)):
+        this_pt = segment_indexes[i][0], segment_indexes[i][1]
+        distances.append(distance.chebyshev(first_endpoint, this_pt))
+    sort_indexes = np.argsort(distances)
+    sorted_distances = sorted(distances)
+    median_val = np.median(sorted_distances)
+    dist_from_median = abs(sorted_distances-median_val)
+    median_distance= np.where(dist_from_median == np.min(dist_from_median))[0][0]
+    segment_median = segment_indexes[np.where(distances == median_distance)]
+    segment_median = segment_median.flatten()
+
+    ####################################################
+    point = segment_median
+    crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+    crop_inds = np.transpose(np.where(crop_im))
+    tangent = cv2.fitLine(crop_inds,cv2.DIST_L2,0,0.1,0.1)
+    vx, vy = tangent[0], tangent[1]
+    bx = -vy
+    by = vx
+    
+    #####################################################
+    dist = 5
+    diam = 0
+    while diam == 0:
+        dist +=5
+        xlen = bx*dist/2
+        ylen = by*dist/2
+    
+        x1 = int(np.round(point[0]-xlen))
+        x2 = int(np.round(point[0]+xlen))
+    
+        y1 = int(np.round(point[1]-ylen))
+        y2 = int(np.round(point[1]+ylen))
+    
+        rr, cc = line(x1,y1,x2,y2)
+        cross_index = []
+        for r,c in zip(rr,cc):
+            cross_index.append([r,c])
+        coords = x1,x2,y1,y2
+        seg_val = []
+        for i in cross_index:
+            seg_val.append(im[i[0], i[1]])
+        steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
+        if steps[0] == 0:
+            steps = steps[1:]
+        num_steps = len(steps)
+        if num_steps == 2:
+            diam = abs(steps[1]-steps[0])
+        if dist >100:
+            break
+    length = diam*1.5
+    ################################################################
+    viz = np.zeros_like(seg)
+    diameter = []
+    segment_inds = np.argwhere(segment)
+    for i in range(10,len(segment_inds),10):
+        point = segment_inds[i]
+        crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+        crop_inds = np.transpose(np.where(crop_im))
+        tangent = cv2.fitLine(crop_inds,cv2.DIST_L2,0,0.1,0.1)
+        vx, vy = tangent[0], tangent[1]
+        bx = -vy
+        by = vx
+        
+        
+        xlen = vx*length/2
+        ylen = vy*length/2
+    
+        x1 = int(np.round(point[0]-xlen))
+        x2 = int(np.round(point[0]+xlen))
+    
+        y1 = int(np.round(point[1]-ylen))
+        y2 = int(np.round(point[1]+ylen))
+    
+        rr, cc = line(x1,y1,x2,y2)
+        cross_index = []
+        for r,c in zip(rr,cc):
+            cross_index.append([r,c])
+        ###############################################
+        
+        cross_vals = crossline_intensity(cross_index,seg)
+        
+        cross_vals = []
+        for i in cross_index:
+            cross_vals.append(im[i[0], i[1]])
+        ###########################################
+        steps = np.where(np.roll(cross_vals,1)!=cross_vals)[0]
+        if steps[0] == 0:
+            steps = steps[1:]
+        num_steps = len(steps)
+        if num_steps == 2:
+            diam = abs(steps[1]-steps[0])
+        else:
+            diam = 0
+        
+        ############################################
+        if diam == 0:
+            val = 5
+        else:
+            val = 10
+        for i in cross_index:
+            viz[i[0], i[1]] = val
+        diameter.append(diam)
+    diameter = [i for i in diameter if i != 0]
+    mean_diameter = np.mean(diameter)
+    
+    return diameter, mean_diameter, viz
+
+
+
