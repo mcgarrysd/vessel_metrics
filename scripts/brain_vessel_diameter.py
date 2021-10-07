@@ -20,8 +20,9 @@ from skimage.morphology import skeletonize
 from scipy import stats
 from scipy.spatial import distance
 from skimage.draw import line
+from copy import deepcopy
 
-wt_path = '/home/sean/Documents/suchit_wt_projections/'
+wt_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
 wt_names = ['emb9']
 wt_ims = []
 wt_seg = []
@@ -256,11 +257,12 @@ def find_crossline_length(vx,vy,point,im):
         for i in cross_index:
             seg_val.append(im[i[0], i[1]])
         steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
-        num_steps = len(steps)
-        if num_steps == 2:
-            diam = abs(steps[1]-steps[0])
-        if distance >100:
-            break
+        if steps.size>0:
+            num_steps = len(steps)
+            if num_steps == 2:
+                diam = abs(steps[1]-steps[0])
+            if distance >100:
+                break
     length = diam*1.5
     return length
         
@@ -276,14 +278,17 @@ def crossline_intensity(cross_index, im, plot = False):
 
 def label_diameter(cross_vals):
     steps = np.where(np.roll(cross_vals,1)!=cross_vals)[0]
-    if steps[0] == 0:
-        steps = steps[1:]
-    num_steps = len(steps)
-    if num_steps == 2:
-        diameter = abs(steps[1]-steps[0])
+    if steps.size>0:
+        if steps[0] == 0:
+            steps = steps[1:]
+        num_steps = len(steps)
+        if num_steps == 2:
+            diam = abs(steps[1]-steps[0])
+        else:
+            diam = 0
     else:
-        diameter = 0
-    return diameter
+        diam = 0
+    return diam
 
 ######################################################################
 ######################################################################
@@ -341,16 +346,17 @@ def vessel_diameter_verbose(edge_labels, segment_number, seg):
         coords = x1,x2,y1,y2
         seg_val = []
         for i in cross_index:
-            seg_val.append(im[i[0], i[1]])
+            seg_val.append(seg[i[0], i[1]])
         steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
-        if steps[0] == 0:
-            steps = steps[1:]
-        num_steps = len(steps)
-        if num_steps == 2:
-            diam = abs(steps[1]-steps[0])
+        if step.size>0:
+            if steps[0] == 0:
+                steps = steps[1:]
+            num_steps = len(steps)
+            if num_steps == 2:
+                diam = abs(steps[1]-steps[0])
         if dist >100:
             break
-    length = diam*1.5
+    length = diam*2.5
     ################################################################
     viz = np.zeros_like(seg)
     diameter = []
@@ -365,8 +371,8 @@ def vessel_diameter_verbose(edge_labels, segment_number, seg):
         by = vx
         
         
-        xlen = vx*length/2
-        ylen = vy*length/2
+        xlen = bx*length/2
+        ylen = by*length/2
     
         x1 = int(np.round(point[0]-xlen))
         x2 = int(np.round(point[0]+xlen))
@@ -380,18 +386,19 @@ def vessel_diameter_verbose(edge_labels, segment_number, seg):
             cross_index.append([r,c])
         ###############################################
         
-        cross_vals = crossline_intensity(cross_index,seg)
-        
         cross_vals = []
-        for i in cross_index:
-            cross_vals.append(im[i[0], i[1]])
+        for c in cross_index:
+            cross_vals.append(seg[c[0], c[1]])
         ###########################################
         steps = np.where(np.roll(cross_vals,1)!=cross_vals)[0]
-        if steps[0] == 0:
-            steps = steps[1:]
-        num_steps = len(steps)
-        if num_steps == 2:
-            diam = abs(steps[1]-steps[0])
+        if steps.size>0:
+            if steps[0] == 0:
+                steps = steps[1:]
+            num_steps = len(steps)
+            if num_steps == 2:
+                diam = abs(steps[1]-steps[0])
+            else:
+                diam = 0
         else:
             diam = 0
         
@@ -400,10 +407,10 @@ def vessel_diameter_verbose(edge_labels, segment_number, seg):
             val = 5
         else:
             val = 10
-        for i in cross_index:
-            viz[i[0], i[1]] = val
+        for c in cross_index:
+            viz[c[0], c[1]] = val
         diameter.append(diam)
-    diameter = [i for i in diameter if i != 0]
+    diameter = [x for x in diameter if x != 0]
     mean_diameter = np.mean(diameter)
     
     return diameter, mean_diameter, viz
