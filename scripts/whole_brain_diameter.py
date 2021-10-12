@@ -38,21 +38,92 @@ _, edge_labels = cv2.connectedComponents(edges)
 unique_edges = np.unique(edge_labels)
 unique_edges = np.delete(unique_edges,0)
 
-minimum_length = 50
-full_viz = np.zeros_like(im_crop)
+# zero padding
+pad_size = 50
+edge_label_pad = np.pad(edge_labels,pad_size)
+seg_pad = np.pad(seg_crop, pad_size)
+
+minimum_length = 25
+full_viz = np.zeros_like(seg_pad)
 diameters = []
 for i in unique_edges:
-    seg_length = len(np.argwhere(edge_labels == i))
+    seg_length = len(np.argwhere(edge_label_pad == i))
     if seg_length>minimum_length:
         print(i)
-        _, temp_diam, temp_viz = visualize_vessel_diameter(edge_labels, i, seg_crop)
+        _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad)
         diameters.append(temp_diam)
         full_viz = full_viz + temp_viz
         
-overlay = seg_crop + full_viz + skel
+plt.imshow(full_viz)
+im_shape = edge_label_pad.shape
+full_viz_no_pad = full_viz[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
+
+overlay = seg_crop + full_viz_no_pad + skel
 vm.overlay_segmentation(im_crop, overlay)
 
 
+def whole_anatomy_diameter(seg, edge_labels, minimum_length = 25, pad_size = 50): 
+    unique_edges = np.unique(edge_labels)
+    unique_edges = np.delete(unique_edges,0)
+    
+    edge_label_pad = np.pad(edge_labels,pad_size)
+    seg_pad = np.pad(seg, pad_size)
+    full_viz = np.zeros_like(seg_pad)
+    diameters = []
+    for i in unique_edges:
+        seg_length = len(np.argwhere(edge_label_pad == i))
+        if seg_length>minimum_length:
+            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad)
+            diameters.append(temp_diam)
+            full_viz = full_viz + temp_viz
+    im_shape = edge_label_pad.shape
+    full_viz_no_pad = full_viz[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
+    
+    return full_viz_no_pad, diameters
+
+
+########################################################################
+    
+new_im = 'emb2'
+im2 = cv2.imread(wt_path+new_im+'.png',0)
+seg2 = vm.brain_seg(im2, sato_thresh = 40)
+
+im_crop2 = vm.crop_brain_im(im2)
+seg_crop2 = vm.crop_brain_im(seg2)
+
+vm.overlay_segmentation(im_crop2, seg_crop2)
+
+skel2 = skeletonize(seg_crop2)
+edges2 , bp = vm.find_branchpoints(skel2)
+
+_, edge_labels2 = cv2.connectedComponents(edges2)
+
+full_viz2, diameters2 = whole_anatomy_diameter(seg_crop2, edge_labels2)
+
+overlay2 = seg_crop2 + full_viz2 + skel2
+vm.overlay_segmentation(im_crop2, overlay2)
+
+
+
+
+########################################################################
+ret_path = '/home/sean/Downloads/labels-ah/'
+ret_name = 'im0001.ah.ppm'
+
+ret_im = cv2.imread(ret_path+ret_name,0)
+ret_im[ret_im>0] = 1
+ret_skel = skeletonize(ret_im)
+
+vm.overlay_segmentation(ret_im, ret_skel)
+
+ret_edges , bp = vm.find_branchpoints(ret_skel)
+
+_, ret_edge_labels = cv2.connectedComponents(ret_edges)
+
+ret_viz, ret_diam = whole_anatomy_diameter(ret_im, ret_edge_labels)
+
+ret_overlay = ret_viz + ret_skel
+vm.overlay_segmentation(ret_im, ret_overlay)
 
 ################################################################################
 
@@ -89,7 +160,10 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg):
             viz[ind[0], ind[1]] = val
         diameter.append(diam)
     diameter = [x for x in diameter if x != 0]
-    mean_diameter = np.mean(diameter)
+    if diameter:
+        mean_diameter = np.mean(diameter)
+    else:
+        mean_diameter = 0
     
     return diameter, mean_diameter, viz
     
@@ -166,7 +240,7 @@ def find_crossline_length(vx,vy,point,im):
         if all(i<im_size for i in coords):
             seg_val = []
             for i in cross_index:
-                seg_val.append(seg[i[0], i[1]])
+                seg_val.append(im[i[0], i[1]])
             steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
             if steps.size>0:
                 if steps[0] == 0:
@@ -208,9 +282,141 @@ def label_diameter(cross_vals):
 
 ########################################################################
     
-  
-segment_number = 53
-seg = deepcopy(seg_crop)
+edge_label_test = deepcopy(edge_labels2)
+segment_number = 100
+seg_test = deepcopy(seg_crop2)
+
+edge_label_test = np.pad(edge_label_test,50)
+seg_test = np.pad(seg_test,50)
+
+segment = np.zeros_like(edge_label_test)
+segment[edge_label_test==segment_number] = 1
+
+#########################################################
+
+segment_endpoints = vm.find_endpoints(segment)
+endpoint_index = np.where(segment_endpoints)
+first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
+segment_indexes = np.argwhere(segment==1)
+    
+distances = []
+for i in range(len(segment_indexes)):
+    this_pt = segment_indexes[i][0], segment_indexes[i][1]
+    distances.append(distance.chebyshev(first_endpoint, this_pt))
+sort_indexes = np.argsort(distances)
+sorted_distances = sorted(distances)
+median_val = np.median(sorted_distances)
+dist_from_median = abs(sorted_distances-median_val)
+median_distance= np.where(dist_from_median == np.min(dist_from_median))[0][0]
+segment_median = segment_indexes[np.where(distances == median_distance)]
+segment_median = segment_median.flatten()
+
+####################################################
+point = segment_median
+crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+crop_inds = np.transpose(np.where(crop_im))
+tangent = cv2.fitLine(crop_inds,cv2.DIST_L2,0,0.1,0.1)
+vx, vy = tangent[0], tangent[1]
+bx = -vy
+by = vx
+
+#####################################################
+dist = 5
+diam = 0
+im_size = seg_test.shape[0]
+while diam == 0:
+    dist +=5
+    xlen = bx*dist/2
+    ylen = by*dist/2
+
+    x1 = int(np.round(point[0]-xlen))
+    x2 = int(np.round(point[0]+xlen))
+
+    y1 = int(np.round(point[1]-ylen))
+    y2 = int(np.round(point[1]+ylen))
+
+    rr, cc = line(x1,y1,x2,y2)
+    cross_index = []
+    for r,c in zip(rr,cc):
+        cross_index.append([r,c])
+    coords = x1,x2,y1,y2
+    if all(i<im_size for i in coords):
+        print('coords within image bounds, dist ' + str(dist))
+        seg_val = []
+        for i in cross_index:
+            seg_val.append(seg_test[i[0], i[1]])
+        steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
+        if steps.size>0:
+            if steps[0] == 0:
+                steps = steps[1:]
+            num_steps = len(steps)
+            if num_steps == 2:
+                diam = abs(steps[1]-steps[0])
+        if dist >100:
+            print('dist > 100')
+            break
+    else:
+        print('coords not within image bounds')
+        break
+length = diam*2.5
+################################################################
+viz = np.zeros_like(seg_test)
+diameter = []
+segment_inds = np.argwhere(segment)
+for i in range(10,len(segment_inds),10):
+    point = segment_inds[i]
+    crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+    crop_inds = np.transpose(np.where(crop_im))
+    tangent = cv2.fitLine(crop_inds,cv2.DIST_L2,0,0.1,0.1)
+    vx, vy = tangent[0], tangent[1]
+    bx = -vy
+    by = vx
+    
+    
+    xlen = bx*length/2
+    ylen = by*length/2
+
+    x1 = int(np.round(point[0]-xlen))
+    x2 = int(np.round(point[0]+xlen))
+
+    y1 = int(np.round(point[1]-ylen))
+    y2 = int(np.round(point[1]+ylen))
+
+    rr, cc = line(x1,y1,x2,y2)
+    cross_index = []
+    for r,c in zip(rr,cc):
+        cross_index.append([r,c])
+    ###############################################
+    
+    cross_vals = []
+    for c in cross_index:
+        cross_vals.append(seg_test[c[0], c[1]])
+    ###########################################
+    steps = np.where(np.roll(cross_vals,1)!=cross_vals)[0]
+    if steps.size>0:
+        if steps[0] == 0:
+            steps = steps[1:]
+        num_steps = len(steps)
+        if num_steps == 2:
+            diam = abs(steps[1]-steps[0])
+        else:
+            diam = 0
+    else:
+        diam = 0
+    
+    ############################################
+    if diam == 0:
+        val = 5
+    else:
+        val = 10
+    for c in cross_index:
+        viz[c[0], c[1]] = val
+    diameter.append(diam)
+diameter = [x for x in diameter if x != 0]
+mean_diameter = np.mean(diameter)
+
+########################################################################
+########################################################################
 
 def vessel_diameter_verbose(edge_labels, segment_number, seg):
     segment = np.zeros_like(edge_labels)
