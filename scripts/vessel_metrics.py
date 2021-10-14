@@ -353,6 +353,21 @@ def vessel_density(im,label, num_tiles_x, num_tiles_y):
     density = density.astype(np.uint16)
     return density, density_array
 
+def reslice_image(image,thickness):
+    num_slices = np.shape(image)[0]
+    out_slices = np.ceil(num_slices/thickness).astype(np.uint16)
+    output = np.zeros([out_slices, np.shape(image)[1], np.shape(image)[2]])
+    count = 0
+    for i in range(0,num_slices, thickness):
+        if i+thickness<num_slices:
+            im_chunk = image[i:i+thickness,:,:]
+        else:
+            im_chunk = image[i:,:,:]
+        
+        output[count,:,:] = np.max(im_chunk,axis = 0)
+        count+=1
+    return output
+
 #########################################################
 # brain specific functions
 

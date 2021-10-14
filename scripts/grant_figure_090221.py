@@ -21,7 +21,7 @@ from scipy import stats
 
 fiugre_path = '/home/sean/Documents/Calgary_postdoc/figures/'
 
-wt_path = '/home/sean/Documents/vessel_metrics/data/suchit_wt_projections/'
+wt_path = '/home/sean/Documents/suchit_wt_projections/'
 wt_names = ['emb3', 'emb6', 'emb8', 'emb9']
 wt_ims = []
 wt_labels = []

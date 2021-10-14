@@ -22,7 +22,7 @@ from scipy import stats
 #######################################################################
 # Create pericyte projection
 
-data_path = '/home/sean/Documents/vessel_metrics/data/suchit_feb_21/'
+data_path = '/home/sean/Documents/suchit_feb_21/'
 data_list = os.listdir(data_path)
 c1_bottom_list= []
 c1_top_list = []

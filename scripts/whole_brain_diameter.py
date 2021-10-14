@@ -33,6 +33,11 @@ seg_crop= vm.crop_brain_im(seg)
 skel = skeletonize(seg_crop)
 edges, bp = vm.find_branchpoints(skel)
 
+visualize_branch_points = False
+if visualize_branch_points:
+    kernel = np.ones([5,5])
+    dilated_bp = cv2.dilate(bp,kernel, iterations = 1)
+    vm.overlay_segmentation(im_crop, dilated_bp*20,alpha = 1)
 _, edge_labels = cv2.connectedComponents(edges)
 
 unique_edges = np.unique(edge_labels)
