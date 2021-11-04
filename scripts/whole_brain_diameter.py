@@ -257,7 +257,7 @@ def find_crossline_length(vx,vy,point,im):
                 break
         else:
             break
-    length = diam*2
+    length = diam*2.5
     return length
         
 def crossline_intensity(cross_index, im, plot = False):

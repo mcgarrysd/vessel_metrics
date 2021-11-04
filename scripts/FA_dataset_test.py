@@ -45,7 +45,7 @@ pad_size = 50
 edge_label_pad = np.pad(edge_labels,pad_size)
 label_pad = np.pad(label, pad_size)
 
-minimum_length = 25
+minimum_length = 10
 full_viz_pad = np.zeros_like(edge_label_pad)
 diameters = []
 for i in unique_edges:
@@ -66,7 +66,53 @@ vm.overlay_segmentation(im, overlay)
 edge_label_ovl = label+full_viz+edge_labels
 vm.overlay_segmentation(im,edge_label_ovl)
 
+#########################################################################
+crop_im = im[1350:1950,1550:2150]
+plt.figure(); plt.imshow(crop_im)
 
+crop_label = label[1350:1950,1550:2150]
+
+crop_skel = skeletonize(crop_label)
+crop_edges, bp = vm.find_branchpoints(crop_skel)
+
+_,crop_el = cv2.connectedComponents(crop_edges)
+
+
+unique_edges = np.unique(edge_labels)
+unique_edges = unique_edges[1:]
+
+pad_size = 50
+crop_elp = np.pad(crop_el,pad_size)
+crop_label_pad = np.pad(crop_label, pad_size)
+
+minimum_length = 10
+crop_full_viz_pad = np.zeros_like(crop_elp)
+diameters = []
+for i in unique_edges:
+    seg_length = len(np.argwhere(crop_elp == i))
+    if seg_length>minimum_length:
+        print(i)
+        _, temp_diam, temp_viz = visualize_vessel_diameter(crop_elp, i, crop_label_pad)
+        diameters.append(temp_diam)
+        crop_full_viz_pad = crop_full_viz_pad + temp_viz
+ 
+im_shape = crop_label_pad.shape       
+full_viz_crop = crop_full_viz_pad[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
+
+
+crop_overlay = crop_label + full_viz_crop + crop_skel
+vm.overlay_segmentation(im, crop_overlay)
+
+edge_overlay = crop_label+full_viz_crop+crop_edges
+vm.overlay_segmentation(im,edge_overlay)
+
+########################################################################
+def connect_segments(skel):
+    edges, bp = vm.find_branchpoints(skel)
+    _,edge_labels = cv2.connectedComponents(edges)
+    
+    edge_labels[edge_labels!=0]+=1
+    bp_el = edge_labels+bp
 ########################################################################
     
 edge_label_test = deepcopy(edge_labels)
