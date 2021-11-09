@@ -204,9 +204,9 @@ def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh
     
     return seg_im
 
-def preprocess_seg(image):
-    image = cv2.medianBlur(image.astype(np.uint8),7)
-    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
+def preprocess_seg(image,ball_size = 400, median_size = 7):
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
                                                             use_paraboloid=False, do_presmooth=True)
     return image
 

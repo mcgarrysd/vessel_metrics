@@ -253,7 +253,7 @@ def find_crossline_length(vx,vy,point,im):
                 num_steps = len(steps)
                 if num_steps == 2:
                     diam = abs(steps[1]-steps[0])
-            if dist >100:
+            if distance >100:
                 break
         else:
             break
