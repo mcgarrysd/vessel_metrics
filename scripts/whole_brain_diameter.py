@@ -189,7 +189,7 @@ def segment_midpoint(segment):
     median_val = np.median(sorted_distances)
     dist_from_median = abs(sorted_distances-median_val)
     median_distance= np.where(dist_from_median == np.min(dist_from_median))[0][0]
-    segment_median = segment_indexes[np.where(distances == median_distance)]
+    segment_median = segment_indexes[median_distance]
     segment_median = segment_median.flatten()
     return segment_median
     
@@ -257,7 +257,7 @@ def find_crossline_length(vx,vy,point,im):
                 break
         else:
             break
-    length = diam*2
+    length = diam*2.5
     return length
         
 def crossline_intensity(cross_index, im, plot = False):
@@ -287,8 +287,8 @@ def label_diameter(cross_vals):
 
 ########################################################################
     
-edge_label_test = deepcopy(edge_labels2)
-segment_number = 100
+edge_label_test = deepcopy(edge_labels)
+segment_number = 9698
 seg_test = deepcopy(seg_crop2)
 
 edge_label_test = np.pad(edge_label_test,50)
