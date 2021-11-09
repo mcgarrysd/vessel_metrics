@@ -107,12 +107,54 @@ edge_overlay = crop_label+full_viz_crop+crop_edges
 vm.overlay_segmentation(im,edge_overlay)
 
 ########################################################################
+i = 299
+
 def connect_segments(skel):
     edges, bp = vm.find_branchpoints(skel)
     _,edge_labels = cv2.connectedComponents(edges)
     
     edge_labels[edge_labels!=0]+=1
     bp_el = edge_labels+bp
+    
+    _, bp_labels = cv2.connectedComponents(bp)
+    unique_bp = np.unique(bp_labels)
+    unique_bp = unique_bp[1:]
+    
+    bp_list = []
+    bp_connections = []
+    bp_coords = []
+    for i in unique_bp:
+        temp_bp = np.zeros_like(bp_labels)
+        temp_bp[bp_labels == i] = 1
+        branchpoint_viz = temp_bp + edge_labels
+        
+        this_bp_inds = np.argwhere(temp_bp == 1)
+        
+        connected_segs = []
+        for x,y in this_bp_inds:
+            bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+            if np.any(bp_neighbors>1):
+                connections = int(bp_neighbors[bp_neighbors>1])
+                connected_segs.append(connections)
+                bp_coords.append((x,y))
+        bp_list.append(i)
+        bp_connections.append(connected_segs)
+        
+        vx = []
+        vy = []
+        for seg in connected_segs:
+            temp_seg = np.zeros_like(bp_labels)
+            temp_seg[edge_labels == seg] = 1
+            endpoint_im = vm.find_endpoints(temp_seg)
+            endpoints = np.argwhere(endpoint_im>0)
+            
+            line = cv2.fitLine(endpoints,cv2.DIST_L2,0,0.1,0.1)
+            vx.append(line[0])
+            vy.append(line[1])
+
+            
+            
+            
 ########################################################################
     
 edge_label_test = deepcopy(edge_labels)
