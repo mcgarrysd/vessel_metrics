@@ -21,6 +21,7 @@ from scipy import stats
 from scipy.spatial import distance
 from skimage.draw import line
 from copy import deepcopy
+from bresenham import bresenham
 
 
 data_path = '/home/sean/Documents/RECOVERY-FA19/'
@@ -108,6 +109,8 @@ vm.overlay_segmentation(im,edge_overlay)
 
 ########################################################################
 i = 299
+new_edges = deepcopy(edges)
+new_bp = deepcopy(bp)
 
 def connect_segments(skel):
     edges, bp = vm.find_branchpoints(skel)
@@ -126,7 +129,7 @@ def connect_segments(skel):
     for i in unique_bp:
         temp_bp = np.zeros_like(bp_labels)
         temp_bp[bp_labels == i] = 1
-        branchpoint_viz = temp_bp + edge_labels
+        branchpoint_viz = temp_bp*300 + edge_labels
         
         this_bp_inds = np.argwhere(temp_bp == 1)
         
@@ -149,12 +152,40 @@ def connect_segments(skel):
             endpoints = np.argwhere(endpoint_im>0)
             
             line = cv2.fitLine(endpoints,cv2.DIST_L2,0,0.1,0.1)
-            vx.append(line[0])
-            vy.append(line[1])
-
+            vx.append(float(line[0]))
+            vy.append(float(line[1]))
             
+        vx = np.array(vx).flatten().tolist()
+        vy = np.array(vy).flatten().tolist()
+        
+        vx_r = []
+        for x in vx:
+            vx_r.append(np.round(x,4))
+        
+        vy_r = []
+        for x in vy:
+            vy_r.append(np.round(x,4))
+        
+        slope_tolerance = 0.1
+        for x,y in itertools.combinations(vx_r,2):
+            if np.abs(x-y)<slope_tolerance:
+                pair_inds_x = [np.where(vx_r == x)[0], np.where(vx_r == y)[0]]
+        
+        for x,y in itertools.combinations(vy_r,2):
+            if np.abs(x-y)<slope_tolerance:
+                pair_inds_y = [np.where(vy_r == x)[0], np.where(vy_r == y)[0]]
+        
+        if pair_inds_x == pair_inds_y:
+            c1 = bp_coords[pair_inds_x[0][0]]
+            c2 = bp_coords[pair_inds_y[1][0]]
+            connected_pts = list(bresenham(c1[0],c1[1],c2[0],c2[1]))
+        
+        for x,y in connected_pts:
+            new_edges[x,y] = 1
+            new_bp[x,y] = 0 
             
-            
+        new_bp_el = new_edges+new_bp*2
+        
 ########################################################################
     
 edge_label_test = deepcopy(edge_labels)

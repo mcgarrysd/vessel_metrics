@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Nov 15 13:29:37 2021
+
+Generates projections on Suchit's data
+Dataset generation for experiment 1 (segmentation efficacy) of vm manuscript
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+
+
+data_path = '/home/sean/Documents/Data/wt_brain_czi/' 
+output_path = '/home/sean/Documents/vm_manuscript/E1_segmentation/'
+
+data_files = os.listdir(data_path)
+
+show_volumes = False
+preproc_data = True
+if show_volumes:   
+    reslice_list = []
+    for file in data_files:
+        volume = vm.preprocess_czi(data_path,file)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        this_slice = reslice[0]
+        crop_slice = vm.crop_brain_im(this_slice)
+        reslice_list.append(crop_slice)
+    if show_volumes:
+        for i in reslice_list:
+            plt.figure(); plt.imshow(i[0])
+    
+save_projections = False
+if save_projections:
+    for file, im in zip(data_files, reslice_list):
+        fish = file.split('_')[0]
+        im_name = fish + '.png'
+        cv2.imwrite(output_path +im_name, im)
