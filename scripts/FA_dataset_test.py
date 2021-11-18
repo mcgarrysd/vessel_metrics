@@ -24,7 +24,7 @@ from copy import deepcopy
 from bresenham import bresenham
 
 
-data_path = '/home/sean/Documents/RECOVERY-FA19/'
+data_path = '/home/sean/Documents/Data/RECOVERY-FA19/'
 
 im_name = 'Img01_RECOVERY-FA19.tif'
 label_name = 'Label01_RECOVERY-FA19.png'
@@ -79,7 +79,7 @@ crop_edges, bp = vm.find_branchpoints(crop_skel)
 _,crop_el = cv2.connectedComponents(crop_edges)
 
 
-unique_edges = np.unique(edge_labels)
+unique_edges = np.unique(crop_el)
 unique_edges = unique_edges[1:]
 
 pad_size = 50
@@ -93,7 +93,7 @@ for i in unique_edges:
     seg_length = len(np.argwhere(crop_elp == i))
     if seg_length>minimum_length:
         print(i)
-        _, temp_diam, temp_viz = visualize_vessel_diameter(crop_elp, i, crop_label_pad)
+        _, temp_diam, temp_viz = vm.visualize_vessel_diameter(crop_elp, i, crop_label_pad)
         diameters.append(temp_diam)
         crop_full_viz_pad = crop_full_viz_pad + temp_viz
  

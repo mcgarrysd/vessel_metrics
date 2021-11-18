@@ -19,6 +19,7 @@ import os
 from czifile import CziFile
 from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
+from skimage.draw import line
 
 
 def fill_holes(label_binary, hole_size):
@@ -463,7 +464,7 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg):
     return diameter, mean_diameter, viz
 
 def segment_midpoint(segment):
-    segment_endpoints = vm.find_endpoints(segment)
+    segment_endpoints = find_endpoints(segment)
     endpoint_index = np.where(segment_endpoints)
     first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
     segment_indexes = np.argwhere(segment==1)
