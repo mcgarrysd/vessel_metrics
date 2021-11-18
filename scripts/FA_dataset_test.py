@@ -22,7 +22,7 @@ from scipy.spatial import distance
 from skimage.draw import line
 from copy import deepcopy
 from bresenham import bresenham
-
+import itertools
 
 data_path = '/home/sean/Documents/Data/RECOVERY-FA19/'
 
@@ -113,6 +113,7 @@ new_edges = deepcopy(edges)
 new_bp = deepcopy(bp)
 
 def connect_segments(skel):
+    skel = np.pad(skel,50)
     edges, bp = vm.find_branchpoints(skel)
     _,edge_labels = cv2.connectedComponents(edges)
     
@@ -126,10 +127,14 @@ def connect_segments(skel):
     bp_list = []
     bp_connections = []
     bp_coords = []
+    new_edges = np.zeros_like(skel)
+    new_bp = np.zeros_like(skel)
+    branchpoint_viz = edge_labels
     for i in unique_bp:
+        print('branch point ' + str(i))
         temp_bp = np.zeros_like(bp_labels)
         temp_bp[bp_labels == i] = 1
-        branchpoint_viz = temp_bp*300 + edge_labels
+        branchpoint_viz = temp_bp*300 + branchpoint_viz
         
         this_bp_inds = np.argwhere(temp_bp == 1)
         
@@ -137,7 +142,7 @@ def connect_segments(skel):
         for x,y in this_bp_inds:
             bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
             if np.any(bp_neighbors>1):
-                connections = int(bp_neighbors[bp_neighbors>1])
+                connections = bp_neighbors[bp_neighbors>1].tolist()
                 connected_segs.append(connections)
                 bp_coords.append((x,y))
         bp_list.append(i)
@@ -146,6 +151,7 @@ def connect_segments(skel):
         vx = []
         vy = []
         for seg in connected_segs:
+            print('segment ' + str(seg))
             temp_seg = np.zeros_like(bp_labels)
             temp_seg[edge_labels == seg] = 1
             endpoint_im = vm.find_endpoints(temp_seg)
@@ -167,6 +173,8 @@ def connect_segments(skel):
             vy_r.append(np.round(x,4))
         
         slope_tolerance = 0.1
+        pair_inds_x = []
+        pair_inds_y = []
         for x,y in itertools.combinations(vx_r,2):
             if np.abs(x-y)<slope_tolerance:
                 pair_inds_x = [np.where(vx_r == x)[0], np.where(vx_r == y)[0]]
@@ -179,12 +187,17 @@ def connect_segments(skel):
             c1 = bp_coords[pair_inds_x[0][0]]
             c2 = bp_coords[pair_inds_y[1][0]]
             connected_pts = list(bresenham(c1[0],c1[1],c2[0],c2[1]))
-        
-        for x,y in connected_pts:
-            new_edges[x,y] = 1
-            new_bp[x,y] = 0 
-            
-        new_bp_el = new_edges+new_bp*2
+            temp_edges = np.zeros_like(skel)
+            temp_bp = np.zeros_like(skel)
+            for x,y in connected_pts:
+                temp_edges[x,y] = 1
+                temp_bp[x,y] = 1 
+                
+            new_edges = new_edges+temp_edges
+            new_bp = new_bp + temp_bp
+    new_edges = new_edges + edges 
+    new_bp = bp - new_bp
+    return new_bp_el
         
 ########################################################################
     
