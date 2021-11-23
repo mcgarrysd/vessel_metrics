@@ -19,6 +19,7 @@ import os
 from czifile import CziFile
 from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
+from skimage.draw import line
 
 
 def fill_holes(label_binary, hole_size):
@@ -204,9 +205,9 @@ def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh
     
     return seg_im
 
-def preprocess_seg(image):
-    image = cv2.medianBlur(image.astype(np.uint8),7)
-    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
+def preprocess_seg(image,ball_size = 400, median_size = 7):
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
                                                             use_paraboloid=False, do_presmooth=True)
     return image
 
@@ -401,5 +402,176 @@ def crop_brain_im(im,label = None):
 
 
 #####################################################################
-# DEPRECATED 
+# Diameter
 
+def whole_anatomy_diameter(seg, edge_labels, minimum_length = 25, pad_size = 50): 
+    unique_edges = np.unique(edge_labels)
+    unique_edges = np.delete(unique_edges,0)
+    
+    edge_label_pad = np.pad(edge_labels,pad_size)
+    seg_pad = np.pad(seg, pad_size)
+    full_viz = np.zeros_like(seg_pad)
+    diameters = []
+    for i in unique_edges:
+        seg_length = len(np.argwhere(edge_label_pad == i))
+        if seg_length>minimum_length:
+            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad)
+            diameters.append(temp_diam)
+            full_viz = full_viz + temp_viz
+    im_shape = edge_label_pad.shape
+    full_viz_no_pad = full_viz[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
+    
+    return full_viz_no_pad, diameters
+
+def visualize_vessel_diameter(edge_labels, segment_number, seg):
+    segment = np.zeros_like(edge_labels)
+    segment[edge_labels==segment_number] = 1
+    segment_median = segment_midpoint(segment)
+
+    vx,vy = tangent_slope(segment, segment_median)
+    bx,by = crossline_slope(vx,vy)
+    
+    viz = np.zeros_like(seg)
+    cross_length = find_crossline_length(bx,by, segment_median, seg)
+    
+    if cross_length == 0:
+        diameter = 0
+        mean_diameter = 0
+        return diameter, mean_diameter, viz
+    
+    diameter = []
+    segment_inds = np.argwhere(segment)
+    for i in range(10,len(segment_inds),10):
+        this_point = segment_inds[i]
+        vx,vy = tangent_slope(segment, this_point)
+        bx,by = crossline_slope(vx,vy)
+        _, cross_index = make_crossline(bx,by, this_point, cross_length)
+        cross_vals = crossline_intensity(cross_index,seg)
+        diam = label_diameter(cross_vals)
+        if diam == 0:
+            val = 5
+        else:
+            val = 10
+        for ind in cross_index:
+            viz[ind[0], ind[1]] = val
+        diameter.append(diam)
+    diameter = [x for x in diameter if x != 0]
+    if diameter:
+        mean_diameter = np.mean(diameter)
+    else:
+        mean_diameter = 0
+    
+    return diameter, mean_diameter, viz
+
+def segment_midpoint(segment):
+    segment_endpoints = find_endpoints(segment)
+    endpoint_index = np.where(segment_endpoints)
+    first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
+    segment_indexes = np.argwhere(segment==1)
+        
+    distances = []
+    for i in range(len(segment_indexes)):
+        this_pt = segment_indexes[i][0], segment_indexes[i][1]
+        distances.append(distance.chebyshev(first_endpoint, this_pt))
+    sort_indexes = np.argsort(distances)
+    sorted_distances = sorted(distances)
+    median_val = np.median(sorted_distances)
+    dist_from_median = abs(sorted_distances-median_val)
+    median_distance= np.where(dist_from_median == np.min(dist_from_median))[0][0]
+    segment_median = segment_indexes[median_distance]
+    segment_median = segment_median.flatten()
+    return segment_median
+    
+def tangent_slope(segment, point):
+    point = point.flatten()
+    crop_im = segment[point[0]-5:point[0]+5,point[1]-5:point[1]+5]
+    crop_inds = np.transpose(np.where(crop_im))
+    line = cv2.fitLine(crop_inds,cv2.DIST_L2,0,0.1,0.1)
+    vx, vy = line[0], line[1]
+    return vx, vy
+
+def crossline_slope(vx,vy):
+    bx = -vy
+    by = vx
+    return bx,by
+
+def make_crossline(vx,vy,point,length):
+    xlen = vx*length/2
+    ylen = vy*length/2
+    
+    x1 = int(np.round(point[0]-xlen))
+    x2 = int(np.round(point[0]+xlen))
+    
+    y1 = int(np.round(point[1]-ylen))
+    y2 = int(np.round(point[1]+ylen))
+    
+    rr, cc = line(x1,y1,x2,y2)
+    cross_index = []
+    for r,c in zip(rr,cc):
+        cross_index.append([r,c])
+    coords = x1,x2,y1,y2
+    
+    return coords, cross_index
+
+
+def plot_crossline(im, cross_index, bright = False):
+    if bright == True:
+        val = 250
+    else:
+        val = 5
+    
+    for i in cross_index:
+        im[i[0], i[1]] = val
+    return im
+
+def find_crossline_length(vx,vy,point,im):
+    distance = 5
+    diam = 0
+    im_size = im.shape[0]
+    while diam == 0:
+        distance +=5
+        coords, cross_index = make_crossline(vx,vy,point,distance)
+        if all(i<im_size for i in coords):
+            seg_val = []
+            for i in cross_index:
+                seg_val.append(im[i[0], i[1]])
+            steps = np.where(np.roll(seg_val,1)!=seg_val)[0]
+            if steps.size>0:
+                if steps[0] == 0:
+                    steps = steps[1:]
+                num_steps = len(steps)
+                if num_steps == 2:
+                    diam = abs(steps[1]-steps[0])
+            if distance >100:
+                break
+        else:
+            break
+    length = diam*2.5
+    return length
+        
+def crossline_intensity(cross_index, im, plot = False):
+    cross_vals = []
+    for i in cross_index:
+        cross_vals.append(im[i[0], i[1]])
+    if plot == True:
+        inds = list(range(len(cross_vals)))
+        plt.figure()
+        plt.plot(inds, cross_vals)
+    return cross_vals
+
+def label_diameter(cross_vals):
+    steps = np.where(np.roll(cross_vals,1)!=cross_vals)[0]
+    if steps.size>0:
+        if steps[0] == 0:
+            steps = steps[1:]
+        num_steps = len(steps)
+        if num_steps == 2:
+            diam = abs(steps[1]-steps[0])
+        else:
+            diam = 0
+    else:
+        diam = 0
+    return diam
+
+#####################################################################
+# DEPRECATED
