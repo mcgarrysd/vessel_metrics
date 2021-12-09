@@ -16,25 +16,28 @@ import glob, os
 from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
 from skimage.morphology import skeletonize
+from copy import deepcopy
 
 data_path = '/home/sean/Documents/vm_manuscript/E3_diameter/'
 
 test_embs = ['emb1', 'emb3', 'emb5', 'emb7', 'emb9']
 
 im_list = []
+<<<<<<< HEAD
 label_list = []
 edge_label_list = []
 viz_list = []
 seg_list = []
 for i in test_embs:
     im = cv2.imread(data_path+i+'.png',0)
-    
     seg = vm.brain_seg(im)
     skel = skeletonize(seg)
     edges, bp = vm.find_branchpoints(skel)
     _, edge_labels = cv2.connectedComponents(edges)
     viz, diameters = vm.whole_anatomy_diameter(seg, edge_labels)
     
+    im_preproc = vm.contrast_stretch(im)
+    im_preproc = vm.preprocess_seg(im_preproc)
     im_list.append(im)
     edge_label_list.append(edge_labels)
     viz_list.append(viz)
@@ -74,22 +77,84 @@ for i in emb5_segs:
     temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[2], i, seg_list[2])
     E5_mean_diameter.append(temp_mean)
     E5_viz.append(temp_viz)
-    
+
+vm.overlay_segmentation(im_list[0], label_list[0]+E1_viz[3]*50)
+
 E7_mean_diameter = []
 E7_viz = []
 for i in emb7_segs:
-    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[3], i, seg_list[3])
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[3], i, seg_list[3],im_preproc_list[3])
     E7_mean_diameter.append(temp_mean)
     E7_viz.append(temp_viz)
     
+i = 60
+vm.overlay_segmentation(im_list[3], E7_viz[0]*50)
     
+e7_viz_test = deepcopy(E7_viz[0])
+e7_viz_test[0] = 1
+
+vm.overlay_segmentation(im_list[3], e7_viz_test)
+
 i =56
 E9_mean_diameter = []
 E9_viz = []
 for i in emb9_segs:
-    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[4], i, seg_list[4])
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[4], i, seg_list[4],im_preproc_list[4])
     E9_mean_diameter.append(temp_mean)
     E9_viz.append(temp_viz)
-
-
+    
 vm.overlay_segmentation(im_list[4], seg_list[4]+E9_viz[0])
+
+
+
+###################################################################
+edge_labels = edge_label_list[3]
+seg = seg_list[3]
+im = im_preproc_list[3]
+use_label = False
+segment_number = 60
+
+def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False):
+    segment = np.zeros_like(edge_labels)
+    segment[edge_labels==segment_number] = 1
+    segment_median = vm.segment_midpoint(segment)
+
+    vx,vy = vm.tangent_slope(segment, segment_median)
+    bx,by = vm.crossline_slope(vx,vy)
+    
+    viz = np.zeros_like(seg)
+    cross_length = vm.find_crossline_length(bx,by, segment_median, seg)
+    
+    if cross_length == 0:
+        diameter = 0
+        mean_diameter = 0
+        return diameter, mean_diameter, viz
+    
+    diameter = []
+    segment_inds = np.argwhere(segment)
+    for i in range(10,len(segment_inds),10):
+        print(i)
+        this_point = segment_inds[i]
+        vx,vy = vm.tangent_slope(segment, this_point)
+        bx,by = vm.crossline_slope(vx,vy)
+        _, cross_index = vm.make_crossline(bx,by, this_point, cross_length)
+        if use_label:
+            cross_vals = vm.crossline_intensity(cross_index,seg)
+            diam = vm.label_diameter(cross_vals)
+        else:
+            cross_vals = vm.crossline_intensity(cross_index, im)
+            diam = vm.fwhm_diameter(cross_vals)
+        if diam == 0:
+            val = 5
+        else:
+            val = 10
+        for ind in cross_index:
+            viz[ind[0], ind[1]] = val
+        diameter.append(diam)
+    diameter = [x for x in diameter if x != 0]
+    if diameter:
+        mean_diameter = np.mean(diameter)
+    else:
+        mean_diameter = 0
+    
+    return diameter, mean_diameter, viz

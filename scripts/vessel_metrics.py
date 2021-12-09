@@ -404,7 +404,7 @@ def crop_brain_im(im,label = None):
 #####################################################################
 # Diameter
 
-def whole_anatomy_diameter(seg, edge_labels, minimum_length = 25, pad_size = 50): 
+def whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50): 
     unique_edges = np.unique(edge_labels)
     unique_edges = np.delete(unique_edges,0)
     
@@ -415,7 +415,7 @@ def whole_anatomy_diameter(seg, edge_labels, minimum_length = 25, pad_size = 50)
     for i in unique_edges:
         seg_length = len(np.argwhere(edge_label_pad == i))
         if seg_length>minimum_length:
-            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad)
+            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad, im)
             diameters.append(temp_diam)
             full_viz = full_viz + temp_viz
     im_shape = edge_label_pad.shape
@@ -423,7 +423,7 @@ def whole_anatomy_diameter(seg, edge_labels, minimum_length = 25, pad_size = 50)
     
     return full_viz_no_pad, diameters
 
-def visualize_vessel_diameter(edge_labels, segment_number, seg):
+def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False):
     segment = np.zeros_like(edge_labels)
     segment[edge_labels==segment_number] = 1
     segment_median = segment_midpoint(segment)
@@ -446,8 +446,12 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg):
         vx,vy = tangent_slope(segment, this_point)
         bx,by = crossline_slope(vx,vy)
         _, cross_index = make_crossline(bx,by, this_point, cross_length)
-        cross_vals = crossline_intensity(cross_index,seg)
-        diam = label_diameter(cross_vals)
+        if use_label:
+            cross_vals = crossline_intensity(cross_index,seg)
+            diam = label_diameter(cross_vals)
+        else:
+            cross_vals = crossline_intensity(cross_index, im)
+            diam = fwhm_diameter(cross_vals)
         if diam == 0:
             val = 5
         else:
@@ -572,6 +576,23 @@ def label_diameter(cross_vals):
     else:
         diam = 0
     return diam
+
+def fwhm_diameter(cross_vals):
+    peak = np.max(cross_vals)
+    half_max = np.round(peak/2)
+    
+    peak_ind = np.where(cross_vals == peak)[0][0]
+    before_peak = cross_vals[0:peak_ind]
+    after_peak = cross_vals[peak_ind+1:]
+    try:
+        hm_before = np.argmin(np.abs(before_peak - half_max))
+        hm_after = np.argmin(np.abs(after_peak - half_max))
+    
+        # +2 added because array indexing begins at 0 twice    
+        diameter = (hm_after+peak_ind) - hm_before +2
+    except:
+        diameter = 0
+    return diameter
 
 #####################################################################
 # DEPRECATED
