@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov 19 09:30:13 2021
+
+vm E3 diameter measurement - automatic
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+
+data_path = '/home/sean/Documents/vm_manuscript/E3_diameter/'
+
+test_embs = ['emb1', 'emb3', 'emb5', 'emb7', 'emb9']
+
+im_list = []
+label_list = []
+edge_label_list = []
+viz_list = []
+seg_list = []
+for i in test_embs:
+    im = cv2.imread(data_path+i+'.png',0)
+    
+    seg = vm.brain_seg(im)
+    skel = skeletonize(seg)
+    edges, bp = vm.find_branchpoints(skel)
+    _, edge_labels = cv2.connectedComponents(edges)
+    viz, diameters = vm.whole_anatomy_diameter(seg, edge_labels)
+    
+    im_list.append(im)
+    edge_label_list.append(edge_labels)
+    viz_list.append(viz)
+    seg_list.append(seg)
+
+vm.overlay_segmentation(im_list[0], viz_list[0]+edge_label_list[0])
+vm.overlay_segmentation(im_list[1], viz_list[1]+edge_label_list[1])
+vm.overlay_segmentation(im_list[2], viz_list[2]+edge_label_list[2])
+vm.overlay_segmentation(im_list[3], viz_list[3]+edge_label_list[3])
+vm.overlay_segmentation(im_list[4], viz_list[4]+edge_label_list[4])
+
+emb1_segs = [53, 55,47, 28, 20]
+emb3_segs = [32,51,58,48,29]
+emb5_segs = [36,46,51,20, 27]
+emb7_segs = [60,64,38,37,31]
+emb9_segs =[7,56,61,45,33]
+
+E1_mean_diameter = []
+E1_viz = []
+for i in emb1_segs:
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[0], i, seg_list[0])
+    E1_mean_diameter.append(temp_mean)
+    E1_viz.append(temp_viz)
+    
+    
+E3_mean_diameter = []
+E3_viz = []
+for i in emb3_segs:
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[1], i, seg_list[1])
+    E3_mean_diameter.append(temp_mean)
+    E3_viz.append(temp_viz)
+
+    
+E5_mean_diameter = []
+E5_viz = []
+for i in emb5_segs:
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[2], i, seg_list[2])
+    E5_mean_diameter.append(temp_mean)
+    E5_viz.append(temp_viz)
+    
+E7_mean_diameter = []
+E7_viz = []
+for i in emb7_segs:
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[3], i, seg_list[3])
+    E7_mean_diameter.append(temp_mean)
+    E7_viz.append(temp_viz)
+    
+    
+i =56
+E9_mean_diameter = []
+E9_viz = []
+for i in emb9_segs:
+    temp_diam, temp_mean, temp_viz = vm.visualize_vessel_diameter(edge_label_list[4], i, seg_list[4])
+    E9_mean_diameter.append(temp_mean)
+    E9_viz.append(temp_viz)
+
+
+vm.overlay_segmentation(im_list[4], seg_list[4]+E9_viz[0])
