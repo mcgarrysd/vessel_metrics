@@ -108,8 +108,53 @@ full_viz2, diameters2 = whole_anatomy_diameter(seg_crop2, edge_labels2)
 overlay2 = seg_crop2 + full_viz2 + skel2
 vm.overlay_segmentation(im_crop2, overlay2)
 
+######################################################################
+seg_num = 79
+im_contrast = vm.contrast_stretch(im_crop2)
+plt.imshow(im_crop2)
+im_preproc = vm.preprocess_seg(im_contrast)
+plt.imshow(im_preproc)
+im_sato = sato(im_preproc, sigmas = range(1,10,2), mode = 'reflect', black_ridges = False)
+plt.imshow(im_sato)
+im_sato_norm = np.round(im_sato/np.max(im_sato)*255).astype(np.uint8)
+    
+segment = np.zeros_like(edge_labels2)
+segment[edge_labels2==seg_num] = 1
+segment_median = segment_midpoint(segment)
 
+vx,vy = tangent_slope(segment, segment_median)
+bx,by = crossline_slope(vx,vy)
 
+viz = np.zeros_like(im_crop2)
+cross_length = find_crossline_length(bx,by, segment_median, seg_crop2)
+
+_, cross_index = make_crossline(bx,by,segment_median, cross_length)
+cross_vals_seg = crossline_intensity(cross_index, seg_crop2)
+cross_vals_raw = crossline_intensity(cross_index, im_crop2)
+cross_vals_contrast = crossline_intensity(cross_index, im_contrast)
+cross_vals_smoothed = crossline_intensity(cross_index, im_preproc)
+cross_vals_sato= crossline_intensity(cross_index, im_sato_norm)
+
+plt.figure()
+x = range(len(cross_index))
+plt.plot(x,cross_vals_seg)
+
+plt.figure()
+plt.plot(x,cross_vals_raw)
+
+plt.figure()
+plt.plot(x,cross_vals_contrast)
+
+plt.figure();
+plt.plot(x,cross_vals_smoothed)
+
+plt.figure()
+plt.plot(x,cross_vals_sato)
+
+for ind in cross_index:
+    viz[ind[0], ind[1]] = 200
+    
+vm.overlay_segmentation(im_crop2, viz)
 
 ########################################################################
 ret_path = '/home/sean/Downloads/labels-ah/'
@@ -285,6 +330,7 @@ def label_diameter(cross_vals):
     return diam
 
 
+    
 ########################################################################
     
 edge_label_test = deepcopy(edge_labels)
