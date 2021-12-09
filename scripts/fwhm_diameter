@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Dec  2 10:46:31 2021
+
+Measures diameter as FWHM
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+
+data_path = '/home/sean/Documents/vm_manuscript/E3_diameter/'
+
+test_embs = ['emb1', 'emb3', 'emb5', 'emb7', 'emb9']
+
+im_list = []
+label_list = []
+edge_label_list = []
+viz_list = []
+seg_list = []
+for i in test_embs:
+    im = cv2.imread(data_path+i+'/img.png',0)
+    label = cv2.imread(data_path+i+'/label.png',0)
+    
+    seg = vm.brain_seg(im)
+    skel = skeletonize(seg)
+    edges, bp = vm.find_branchpoints(skel)
+    _, edge_labels = cv2.connectedComponents(edges)
+    viz, diameters = vm.whole_anatomy_diameter(seg, edge_labels)
+    
+    im_list.append(im)
+    label_list.append(label)
+    edge_label_list.append(edge_labels)
+    viz_list.append(viz)
+    seg_list.append(seg)
+    
+this_im = im_list[4]
+this_im = vm.contrast_stretch(this_im)
+this_im = vm.preprocess_seg(this_im)
+this_seg = seg_list[4]
+
+emb9_segs =[7,56,61,45,33]
+
+segment_number = emb9_segs[0]
+segment = np.zeros_like(edge_label_list[4])
+segment[edge_labels==segment_number] = 1
+segment_median = vm.segment_midpoint(segment)
+
+vx,vy = vm.tangent_slope(segment, segment_median)
+bx,by = vm.crossline_slope(vx,vy)
+
+viz = np.zeros_like(seg)
+cross_length = vm.find_crossline_length(bx,by, segment_median, seg)
+
+
+diameter = []
+segment_inds = np.argwhere(segment)
+viz = np.zeros_like(this_im);
+val = 50
+for i in range(10,len(segment_inds),10):
+    this_point = segment_inds[i]
+    vx,vy = vm.tangent_slope(segment, this_point)
+    bx,by = vm.crossline_slope(vx,vy)
+    _, cross_index = vm.make_crossline(bx,by, this_point, cross_length)
+    cross_vals = vm.crossline_intensity(cross_index,this_im)
+    
+    for ind in cross_index:
+        viz[ind[0], ind[1]] = val
+
+i = 90
+cross_vals_seg = vm.crossline_intensity(cross_index,this_seg)
+diam = vm.label_diameter(cross_vals_seg)
+
+vm.overlay_segmentation(this_im, viz)
+x = range(len(cross_vals))
+plt.figure()
+plt.plot(x,cross_vals)
+
+def fwhm_diameter(cross_vals):
+    peak = np.max(cross_vals)
+    half_max = np.round(peak/2)
+    
+    peak_ind = np.where(cross_vals == peak)[0][0]
+    before_peak = cross_vals[0:peak_ind]
+    after_peak = cross_vals[peak_ind+1:]
+    
+    hm_before = np.argmin(np.abs(before_peak - half_max))
+    hm_after = np.argmin(np.abs(after_peak - half_max))
+    
+    # +2 added because array indexing begins at 0 twice    
+    diameter = (hm_after+peak_ind) - hm_before +2
+
+
+    
