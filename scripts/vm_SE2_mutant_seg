@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec 14 12:16:42 2021
+
+vm_SE2_mutant_seg
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from copy import deepcopy
+
+data_path = '/home/sean/Documents/vm_manuscript/E2_parameters/'
+
+test_embs = ['emb3', 'emb4', 'emb5', 'emb11', 'emb13', 'emb14', 'emb15']
+
+
+im_list = []
+label_list = []
+seg_list = []
+conn_list = []
+area_list = []
+length_list = []
+jacc_list = []
+for i in test_embs:
+    print(i)
+    im = cv2.imread(data_path+i+'/img.png',0)
+    label = cv2.imread(data_path+i+'/label.png',0)
+    seg = vm.brain_seg(im, sato_thresh=40)
+    im_preproc = vm.contrast_stretch(im)
+    im_preproc = vm.preprocess_seg(im_preproc)
+    im_list.append(im)
+    seg_list.append(seg)
+    label_list.append(label)
+
+    conn, area, length = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))
+    conn_list.append(conn)
+    area_list.append(area)
+    length_list.append(length)
+    jacc_list.append(vm.jaccard(label, seg))
+
+mean_jacc = np.mean(jacc_list)
+mean_conn = np.mean(conn_list)
+mean_area = np.mean(area_list)
+mean_length = np.mean(length_list)
+
+output = 'Area: ' + str(mean_area) + ' Jacc: ' + str(mean_jacc)
+print(output)
+
+for i,j, k in zip(im_list, seg_list, label_list):
+    k[k>1] = 1
+    vm.overlay_segmentation(i, j+(k*2))
+    
+    plt.figure()
+    plt.imshow(j+2*k)
+    
+    
+plt.imshow(im)
+
+i = 'emb3'
+plt.figure()
+label[label>1] =1
+plt.imshow(seg+label*2)
+
+conn, area, length = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))
+    

@@ -16,7 +16,7 @@ import glob, os
 
 generate_data = True
 if generate_data:
-    data_path = '/home/sean/Documents/suchit_mt/'
+    data_path = '/home/sean/Documents/Data/suchit_mt/'
     data_list = glob.glob(data_path+'*.czi')
     out_path = '/home/sean/Documents/vm_manuscript/E2_parameters/'
     

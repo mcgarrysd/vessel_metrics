@@ -46,3 +46,4 @@ if save_projections:
         fish = file.split('_')[0]
         im_name = fish + '.png'
         cv2.imwrite(output_path +im_name, im)
+        

@@ -23,7 +23,6 @@ data_path = '/home/sean/Documents/vm_manuscript/E3_diameter/'
 test_embs = ['emb1', 'emb3', 'emb5', 'emb7', 'emb9']
 
 im_list = []
-<<<<<<< HEAD
 label_list = []
 edge_label_list = []
 viz_list = []

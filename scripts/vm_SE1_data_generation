@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Dec 15 21:52:18 2021
+
+Cynthia data test
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+
+
+data_path = '/home/sean/Documents/Data/Wnt_Treatment/Nov2/' 
+output_path = '/home/sean/Documents/vm_manuscript/SE1_IWR_treatment/'
+
+data_files = os.listdir(data_path)
+  
+reslice_list = []
+for file in data_files:
+    volume = vm.preprocess_czi(data_path,file, channel = 1)
+    slice_range = len(volume)
+    slice_thickness = np.round(slice_range/2).astype(np.uint8)
+    reslice = vm.reslice_image(volume,slice_thickness)
+    this_slice = reslice[0]
+    reslice_list.append(this_slice)
+        
+save_projections = False
+if save_projections:
+    for file, im in zip(data_files, reslice_list):
+        treatment = file.split(' ')[-1]
+        treatment = treatment.split('.')[0]
+        im_name = 'Nov2_' + treatment + '.png'
+        cv2.imwrite(output_path +im_name, im)
+        
+        
+test_im = cv2.imread(output_path + 'IWR1/'+ 'img.png',0)
+test_label = cv2.imread(output_path + 'IWR1/'+ 'label.png',0)
+
+test_label[test_label>0] =1
+test_im = reslice_list[4]
+test_seg = vm.brain_seg(test_im, ditzle_size = 1000)
+
+plt.imshow(test_label*2+test_seg)
+jacc = vm.jaccard(test_label, test_seg)
+l, a, c = vm.cal(test_label.astype(np.uint8), test_seg.astype(np.uint8))
