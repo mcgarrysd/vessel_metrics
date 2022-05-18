@@ -5,6 +5,9 @@ Vessel metrics is a software package written in python designed to automate the 
 
 This project is actively under development.
 
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/all_diameters.png "Vessel diameters")
+
+
 ## Features
 ### Processing raw microscopy data
 Data input accepted as either native .czi files or in image format
