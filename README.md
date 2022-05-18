@@ -17,32 +17,32 @@ A variety of commonly used preprocessing techniques are included, including roll
 
 Jerman vessel enhancement filter is included with this software package.
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/raw_im.png "Raw image")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/raw_im.png "Raw image")
 
 ### Vessel segmentation
 Vessel segmentation included is optimized for confocal imaging. The default pipeline performs a rolling ball filter, background smoothing, a contrast stretch, and a frangi filter before binarizing the image and performing morphological operations to adjust for common artifacts. Segmentation accuracy can be verified using a jaccard index or vessel specific accuracy metrics (connectivity, area, and length)
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segmentation.png "Vessel segmentation")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segmentation.png "Vessel segmentation")
 
 ### Vessel architecture
 Default skeletonization using skimage inbuilt function is built upon to handle common artefacts in vascular imaging. Small terminal segments are removed and parent segments with multiple child branches are merged to produce a more accurate representation of vessel structure.
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/edge_labels.png "Vessel segments")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/edge_labels.png "Vessel segments")
 
 ### Fully automatic vessel diameter calculation
 Using the vessel skeleton, vessel metrics identifies individual vessel segments and branch points, determines the local slope of a segment, places a cross line of appropriate length, and measures the full width half max diameter across the vessel at each crossline. User defined crossline spacing (default every 10 pixels). 
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segment_diameter.png "Single segment diameter")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segment_diameter.png "Single segment diameter")
 
 ### Vessel parameter calculation
 Vessel metrics calculates branchpoint density, segment length, vessel density, and network length.
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/vessel_density.png "Vessel density map")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/vessel_density.png "Vessel density map")
 
 ### Second channel analysis
 Optimized for pericyte detection in confocal microscopy. This feature allows the integration of vessel parameters with information derived from a second image channel. 
 
-[alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/pericyte_ovl.png "Pericyte overlay")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/pericyte_ovl.png "Pericyte overlay")
 
 ### Visualization tools
 Functions are included to aid in the visualization of the parameter maps, overlaid over the raw image for debugging or figure generation.
