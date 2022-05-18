@@ -32,8 +32,8 @@ conn_list = []
 area_list = []
 length_list = []
 jacc_list = []
-for label in label_list:
-    seg = vm.brain_seg(label)
+for im in im_list:
+    seg = vm.brain_seg(im)
     seg_list.append(seg.astype(np.uint8))
     
     conn, area, length = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))

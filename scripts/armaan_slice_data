@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Mar 20 23:10:45 2022
+
+Armaan Slice Data
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+import pandas as pd
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from copy import deepcopy
+
+
+generate_data = True
+if generate_data:
+    data_path = '/home/sean/Documents/Calgary_postdoc/Data/jasper_042821/czis/'
+    output_path = '/home/sean/Documents/vessel_metrics/data/jasper_042821/slice_data/'
+    file = '30hpf_fish11_wt.czi'
+    
+    volume = vm.preprocess_czi(data_path+file,'', channel = 0)
+    slice_range = len(volume)
+    slice_thicknesses = [1, 5, 10, 20, 49]
+    for i in slice_thicknesses:
+        reslice = vm.reslice_image(volume,i)
+        slice_num = np.floor(reslice.shape[0]/2).astype(np.uint)
+        this_slice = reslice[slice_num]
+    
+        emb_num = '30hpf_fish11_'
+        im_name = emb_num+str(i)+'.png'
+    
+        cv2.imwrite(output_path +im_name, this_slice)
+            

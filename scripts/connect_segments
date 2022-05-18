@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jan 20 10:53:44 2022
+
+Connect segments
+
+@author: sean
+"""
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from timeit import default_timer as timer
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy import stats
+from scipy.spatial import distance
+from skimage.draw import line
+from copy import deepcopy
+from bresenham import bresenham
+import itertools
+
+
+data_path = '/home/sean/Documents/vm_manuscript/E1_combined/'
+
+label_list = []
+im_list = []
+data_files = os.listdir(data_path)
+
+seg_list = []
+for file in data_files:
+    label_list.append(cv2.imread(data_path+file+'/label.png',0))
+    im_list.append(cv2.imread(data_path+file+'/img.png',0))
+
+for im in im_list:
+    seg = vm.brain_seg(im)
+    seg_list.append(seg)    
+
+im = im_list[0]
+seg = seg_list[0]
+skel = skeletonize(seg)
+
+edges, bp = vm.find_branchpoints(skel)
+seg_count, edge_labels = cv2.connectedComponents(edges)
+
+test_seg = 192
+test_bp = 91
+
+def connect_segments(skel):
+    skel = np.pad(skel,50)
+    edges, bp = vm.find_branchpoints(skel)
+    _,edge_labels = cv2.connectedComponents(edges)
+    
+    edge_labels[edge_labels!=0]+=1
+    bp_el = edge_labels+bp
+    
+    _, bp_labels = cv2.connectedComponents(bp)
+    unique_bp = np.unique(bp_labels)
+    unique_bp = unique_bp[1:]
+    
+    bp_list = []
+    bp_connections = []
+    new_edges = np.zeros_like(skel)
+    new_bp = np.zeros_like(skel)
+    for i in unique_bp:
+        #print('branch point ' + str(i))
+        temp_bp = np.zeros_like(bp_labels)
+        temp_bp[bp_labels == i] = 1
+        bp_size = np.sum(temp_bp)
+        if bp_size>1:
+            branchpoint_viz = deepcopy(edge_labels)
+            branchpoint_viz = temp_bp*300 + branchpoint_viz
+            
+            this_bp_inds = np.argwhere(temp_bp == 1)
+            
+            connected_segs = []
+            bp_coords = []
+            for x,y in this_bp_inds:
+                bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+                if np.any(bp_neighbors>1):
+                    connections = bp_neighbors[bp_neighbors>1].tolist()
+                    connected_segs.append(connections)
+                    for c in connections:    
+                        bp_coords.append((x,y))
+            bp_list.append(i)
+            bp_connections.append(connected_segs)
+            connected_segs = flatten(connected_segs)
+            
+            vx = []
+            vy = []
+            for seg in connected_segs:
+                #print('segment ' + str(seg))
+                temp_seg = np.zeros_like(bp_labels)
+                temp_seg[edge_labels == seg] = 1
+                endpoint_im = vm.find_endpoints(temp_seg)
+                endpoints = np.argwhere(endpoint_im>0)
+                if np.size(endpoints):
+                    line = cv2.fitLine(endpoints,cv2.DIST_L2,0,0.1,0.1)
+                    vx.append(float(line[0]))
+                    vy.append(float(line[1]))
+                
+            vx = np.array(vx).flatten().tolist()
+            vy = np.array(vy).flatten().tolist()
+            
+            
+            v_r = list(zip(np.round(vx,3), np.round(vy,3)))
+            slope_tolerance = 0.1
+            
+            inds = list(range(len(v_r)))
+            pair_inds = list(itertools.combinations(inds, 2))
+            count = 0
+            match = []
+            for x,y in itertools.combinations(v_r, 2):
+                if np.abs(x[0] - y[0])<slope_tolerance:
+                    if np.abs(x[1]-y[1])<slope_tolerance:
+                      match = pair_inds[count]
+                count+=1
+                
+            if match:
+                c1 = bp_coords[match[0]]
+                c2 = bp_coords[match[1]]
+                connected_pts = list(bresenham(c1[0],c1[1],c2[0],c2[1]))
+                temp_edges = np.zeros_like(bp_labels)
+                temp_bp = np.zeros_like(bp_labels)
+                for x,y in connected_pts:
+                    temp_edges[x,y] = 1
+                new_edges = new_edges+temp_edges
+                for x,y in this_bp_inds:
+                    if temp_edges[x,y] == 0:
+                        bp_neighbors = edges[x-1:x+2,y-1:y+2]
+                        if np.any(bp_neighbors>0):
+                            temp_bp[x,y] = 1
+                new_bp = temp_bp+new_bp
+            else:
+                new_bp = new_bp + temp_bp
+        else:
+            new_bp = new_bp + temp_bp
+    new_edges = new_edges + edges 
+    xdim, ydim = np.shape(skel)
+    
+    new_edges = new_edges[50:xdim-50, 50:ydim-50]
+    new_bp = new_bp[50:xdim-50, 50:ydim-50]
+    return new_edges, new_bp
+
+edge_list = []
+bp_list = []
+count = 0
+for seg in seg_list:
+    skel = skeletonize(seg)
+    new_edges, new_bp = connect_segments(skel)
+    edge_list.append(new_edges)
+    bp_list.append(new_bp)
+    print(count)
+    count+=1
+
+new_viz = new_edges+new_bp*2
+
+test = new_edges + new_bp*2
+plt.figure(); plt.imshow(test)
+
+def flatten(input_list):
+    return [item for sublist in input_list for item in sublist]
+

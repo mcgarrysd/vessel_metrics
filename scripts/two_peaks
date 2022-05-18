@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 10 10:25:34 2022
+
+Two peaks
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy.stats import ttest_ind
+
+
+data_path = '/home/sean/Documents/vm_manuscript/E1_combined/'
+
+label_list = []
+im_list = []
+data_files = os.listdir(data_path)
+
+for file in data_files:
+    label_list.append(cv2.imread(data_path+file+'/label.png',0))
+    im_list.append(cv2.imread(data_path+file+'/img.png',0))
+    
+for im in im_list:
+    seg = vm.brain_seg(label)
+    seg_list.append(seg.astype(np.uint8))
+    
+im = im_list[0]
+label = label_list[0]
+seg = seg_list[0]
+
+skel = skeletonize(seg)
+edges, bp = vm.connect_segments(skel)
+seg_count, edge_labels = cv2.connectedComponents(edges)
+
+test_segs = [49, 24, 25]
+i = 49
+im_preproc = vm.contrast_stretch(im)
+im_preproc = vm.preprocess_seg(im_preproc)
+temp_diam, temp_mean, temp_viz = visualize_vessel_diameter(edge_labels, i, seg, im_preproc)
+
+
+def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False):
+    segment = np.zeros_like(edge_labels)
+    segment[edge_labels==segment_number] = 1
+    segment_median = vm.segment_midpoint(segment)
+
+    vx,vy = vm.tangent_slope(segment, segment_median)
+    bx,by = vm.crossline_slope(vx,vy)
+    
+    viz = np.zeros_like(seg)
+    cross_length = vm.find_crossline_length(bx,by, segment_median, seg)
+    
+    if cross_length == 0:
+        diameter = 0
+        mean_diameter = 0
+        return diameter, mean_diameter, viz
+    
+    diameter = []
+    segment_inds = np.argwhere(segment)
+    for i in range(10,len(segment_inds),10):
+        this_point = segment_inds[i]
+        vx,vy = vm.tangent_slope(segment, this_point)
+        bx,by = vm.crossline_slope(vx,vy)
+        _, cross_index = vm.make_crossline(bx,by, this_point, cross_length)
+        if use_label:
+            cross_vals = vm.crossline_intensity(cross_index,seg)
+            diam = vm.label_diameter(cross_vals)
+        else:
+            cross_vals = vm.crossline_intensity(cross_index, im)
+            plt.figure()
+            plt.plot(list(range(len(cross_vals))), cross_vals)
+            diam = vm.fwhm_diameter(cross_vals)
+        if diam == 0:
+            val = 5
+        else:
+            val = 10
+        for ind in cross_index:
+            viz[ind[0], ind[1]] = val
+        diameter.append(diam)
+    diameter = [x for x in diameter if x != 0]
+    if diameter:
+        mean_diameter = np.mean(diameter)
+    else:
+        mean_diameter = 0
+    
+    return diameter, mean_diameter, viz
+
+

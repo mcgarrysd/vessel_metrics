@@ -28,12 +28,12 @@ edge_label_list = []
 viz_list = []
 seg_list = []
 for i in test_embs:
-    im = cv2.imread(data_path+i+'.png',0)
+    im = cv2.imread(data_path+i+'/img.png',0)
     seg = vm.brain_seg(im)
     skel = skeletonize(seg)
     edges, bp = vm.find_branchpoints(skel)
     _, edge_labels = cv2.connectedComponents(edges)
-    viz, diameters = vm.whole_anatomy_diameter(seg, edge_labels)
+    viz, diameters = vm.whole_anatomy_diameter(im, seg, edge_labels)
     
     im_preproc = vm.contrast_stretch(im)
     im_preproc = vm.preprocess_seg(im_preproc)

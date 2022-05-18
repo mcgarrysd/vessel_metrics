@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 21 11:58:48 2022
+
+timepoints_3dpf_5dpf
+
+@author: sean
+"""
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+import pandas as pd
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy.stats import ttest_ind
+
+
+generate_data = False
+if generate_data:
+    data_path = '/home/sean/Documents/vm_manuscript/raw_data/brain_images_timepoints/'
+    output_path = '/home/sean/Documents/vm_manuscript/timepoints/'
+    time_pts = ['5dpf']
+    
+    for this_time in time_pts:
+        data_list = os.listdir(data_path+this_time+'/')
+        count = 1
+        for file in data_list:
+            volume = vm.preprocess_czi(data_path+this_time+'/'+file,'', channel = 1)
+            slice_range = len(volume)
+            slice_thickness = np.round(slice_range/2).astype(np.uint8)
+            reslice = vm.reslice_image(volume,slice_thickness)
+            this_slice = reslice[0]
+            im_name = this_time+'_'+str(count)+'.png'
+            
+            cv2.imwrite(output_path +im_name, this_slice)
+            count+=1
+            
+            
+    # 3dpf data
+    data_path = '/home/sean/Documents/Data/Wnt_Treatment/Nov2/'
+    output_path = '/home/sean/Documents/vm_manuscript/timepoints/'
+    data_list = os.listdir(data_path) 
+    data_list = [data_list[2], data_list[3], data_list[5]] # 3 DMSO samples
+    emb_num = 1; this_time = '3dpf'
+    for file in data_list:
+        volume = vm.preprocess_czi(data_path+file,'', channel = 1)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        this_slice = reslice[0]
+        
+        im_name = this_time+'_'+str(emb_num)+'.png'
+        
+        cv2.imwrite(output_path +im_name, this_slice)
+        emb_num+=1
+        
+data_path = '/media/sean/0012-D687/from_home/vm_manuscript/timepoints/' 
+img_list = []
+time_pt = []
+preproc_list = []
+seg_list = []
+skel_list=[]
+bp_list = []
+edges_list = []
+seg_count_list = []
+net_length_list = []
+vessel_density_list = []
+bpd_list = []
+length_list = []
+data_list = os.listdir(data_path)
+time_pt = []
+
+data_list_r = []
+for file in data_list:
+    if any(s in file for s in ['3dpf', '5dpf']):
+        data_list_r.append(file)
+        
+for file in data_list_r:
+    im = cv2.imread(data_path+file,0)
+    img_list.append(im)
+    im_preproc = vm.contrast_stretch(im)
+    im_preproc = vm.preprocess_seg(im_preproc)
+    preproc_list.append(im_preproc)
+    seg = vm.segment_vessels(im)
+    seg_list.append(seg)
+    t = file.split('_')
+    time_pt.append(t[0])
+    skel = skeletonize(seg)
+    edges, bp, new_skel = vm.prune_terminal_segments(skel)
+    skel_list.append(new_skel)
+    edges, bp = vm.connect_segments(new_skel)
+    edges_list.append(edges)
+    bp_list.append(bp)
+    seg_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    seg_count_list.append(seg_count)
+    net_length = vm.network_length(edges)
+    net_length_list.append(net_length)
+
+    _, vessel_density = vm.vessel_density(im, seg, 16, 16)
+    vessel_density = np.array(vessel_density)
+    vessel_density_mean = np.mean(vessel_density[vessel_density>0])
+    vessel_density_list.append(vessel_density_mean)
+    
+    bp_density = vm.branchpoint_density(skel, seg)
+    bpd_list.append(np.mean(bp_density[np.nonzero(bp_density)]))
+    
+    _, length = vm.vessel_length(edge_labels)
+    length_list.append(np.mean(length))
+cols = ['seg_count', 'net_length', 'vd', 'bpd', 'length', 'time']
+
+
+df = pd.DataFrame(zip(seg_count_list, net_length_list, vessel_density_list, bpd_list, length_list,time_pt), columns = cols )
+
+inds3 = np.where(df['time']=='3dpf')
+inds5 = np.where(df['time']=='5dpf')
+
+_,p_val_seg_count = ttest_ind(df['seg_count'][inds3[0]],df['seg_count'][inds5[0]])
+df.boxplot(column = 'seg_count', by = 'time')
+
+_,p_val_net_length = ttest_ind(df['net_length'][inds3[0]],df['net_length'][inds5[0]])
+df.boxplot(column = 'net_length', by = 'time')
+
+_,p_val_vd = ttest_ind(df['vd'][inds3[0]],df['vd'][inds5[0]])
+df.boxplot(column = 'vd', by = 'time')
+
+_,p_val_bpd = ttest_ind(df['bpd'][inds3[0]],df['bpd'][inds5[0]])
+df.boxplot(column = 'bpd', by = 'time')
+
+_,p_val_length = ttest_ind(df['length'][inds3[0]],df['length'][inds5[0]])
+df.boxplot(column = 'length', by = 'time')

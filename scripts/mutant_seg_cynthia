@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 10 09:30:59 2022
+
+mutant_seg_cynthia
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+
+data_path = '/home/sean/Documents/vm_manuscript/SE2_mutant_seg/'
+
+label_list = []
+im_list = []
+data_files = os.listdir(data_path)
+
+for file in data_files:
+    label_list.append(cv2.imread(data_path+file+'/label.png',0))
+    im_list.append(cv2.imread(data_path+file+'/img.png',0))
+    
+seg_list = []
+conn_list = []
+area_list = []
+length_list = []
+jacc_list = []
+for label in label_list:
+    seg = vm.brain_seg(label)
+    seg_list.append(seg.astype(np.uint8))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))
+    conn_list.append(conn)
+    area_list.append(area)
+    length_list.append(length)
+    jacc_list.append(vm.jaccard(label, seg))
+    

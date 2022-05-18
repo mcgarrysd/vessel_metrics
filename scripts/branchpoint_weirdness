@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar 29 21:58:41 2022
+
+branchpoint weirdness
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+import pandas as pd
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy.stats import ttest_ind
+from math import dist
+
+data_path = '/media/sean/0012-D687/from_home/vm_manuscript/timepoints/' 
+data_list = os.listdir(data_path)
+
+data_list_r = []
+for file in data_list:
+    if any(s in file for s in ['3dpf']):
+        data_list_r.append(file)
+
+file = data_list_r[1]
+im = cv2.imread(data_path+file,0)
+im_preproc = vm.contrast_stretch(im)
+im_preproc = vm.preprocess_seg(im_preproc)
+seg = vm.brain_seg(im)
+
+skel = skeletonize(seg)
+edges, bp, skel = vm.prune_terminal_segments(skel)
+fixed_edges, fixed_bp = fix_skel_artefacts(skel)
+vm.overlay_segmentation(im, fixed_edges+fixed_bp*2)
+
+problem_bps = [50]
+problem_segs = [94 96]
+
+def fix_skel_artefacts(skel):
+    edges, bp = vm.find_branchpoints(skel)
+    edge_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    new_edge_num = edge_count+1
+    for i in range(1,bp_count):
+        connected_segs = find_connected_segments(bp_labels, edge_labels, i)
+        print('bp ' + str(i) + '/'+str(bp_count))
+        if len(connected_segs)==2:
+            print(str(i)+ ' has 2 connections')
+            coord_list = []
+            bp_conns = np.zeros_like(edges)
+            for c in connected_segs:
+                bp_conns[edge_labels == c] = c
+                temp_seg = np.zeros_like(edges)
+                temp_seg[edge_labels == c] = 1
+                coords, endpoints = vm.find_endpoints(temp_seg)
+                coord_list.append(coords)
+            lowest_dist = 500
+            for x in coord_list[0]:
+                for y in coord_list[1]:
+                    this_dist = dist(x,y)
+                    if this_dist<lowest_dist:
+                        lowest_dist = this_dist
+                        end1, end2 = x,y
+            bp_labels[bp_labels == i] = 0
+            
+            rr, cc = line(end1[0],end1[1],end2[0],end2[1])
+            for r,c in zip(rr,cc):
+                edge_labels[r,c] = new_edge_num # 
+                
+    new_edges = np.zeros_like(edge_labels)
+    new_bp = np.zeros_like(edge_labels)
+    
+    new_edges[edge_labels>0]=1
+    new_bp[bp_labels>0]=1
+    
+    new_skel = new_edges+new_bp
+    edge_count, edge_labels = cv2.connectedComponents(new_edges.astype(np.uint8))
+    bp_count, bp_labels = cv2.connectedComponents(new_bp.astype(np.uint8))
+    
+    for i in range(1,edge_count):
+        bp_num = branchpoints_per_seg(skel, edge_labels, bp, i)
+        temp_seg = np.zeros_like(edges)
+        temp_seg[edge_labels == i] =1
+        seg_inds = np.argwhere(temp_seg==1)
+        seg_length = np.shape(seg_inds)[0]
+        if (bp_num <2) and (seg_length<10):
+            print('removing seg ' + str(i) + ' of length ' + str(seg_length))
+            for x,y in seg_inds:
+                edge_labels[x,y] = 0
+    
+    new_skel = edge_labels+new_bp
+    new_skel[new_skel>0] = 1
+    new_edges, new_bp = vm.find_branchpoints(new_skel)
+    return new_edges, new_bp
+    
+def find_connected_segments(bp_labels, edge_labels, bp_num):
+    this_bp_inds = np.argwhere(bp_labels == bp_num)
+    temp_bp = np.zeros_like(bp_labels)
+    for i in this_bp_inds:
+        temp_bp[i[0],i[1]]=-1
+    bp_el = edge_labels+temp_bp
+    connected_segs = []
+    bp_coords = []
+    for x,y in this_bp_inds:
+        bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+        if np.any(bp_neighbors>0):
+            connections = bp_neighbors[bp_neighbors>0].tolist()
+            connected_segs.append(connections)
+            for c in connections:    
+                bp_coords.append((x,y))
+    connected_segs = vm.flatten(connected_segs)
+    return connected_segs
+
+
+def branchpoints_per_seg(skel, edge_labels, bp, seg_num):
+    bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    bp_labels = bp_labels+1
+    bp_labels[bp_labels<2]=0
+    temp_seg = np.zeros_like(skel)
+    temp_seg[edge_labels==seg_num]=1
+    temp_seg = temp_seg+bp_labels
+    seg_inds = np.argwhere(temp_seg==1)
+    seg_lenth = np.shape(seg_inds)[0]
+    bp_num = 0
+    for i in seg_inds:
+        this_tile = temp_seg[i[0]-1:i[0]+2,i[1]-1:i[1]+2]
+        unique_bps = np.unique(this_tile)
+        unique_bps = np.sum(unique_bps>1)
+        bp_num = bp_num + unique_bps
+    return bp_num
+
+def find_terminal_segments(skel, edge_labels):
+    skel[skel>0]=1
+    skel_index = np.argwhere(skel == True)
+    tile_sum=[]
+    neighborhood_image = np.zeros(skel.shape)
+
+    for i,j in skel_index:
+        this_tile = skel[i-1:i+2,j-1:j+2]
+        tile_sum.append(np.sum(this_tile))
+        neighborhood_image[i,j] = np.sum(this_tile)
+    terminal_points = np.zeros_like(neighborhood_image)
+    terminal_points[neighborhood_image == 2] = 1
+    
+    terminal_segments = np.zeros_like(terminal_points)
+    unique_labels = np.unique(edge_labels)
+    unique_labels = unique_labels[1:]
+    
+    for u in unique_labels:
+        this_segment = np.zeros_like(terminal_points)
+        this_segment[edge_labels == u] = 1
+        overlap = this_segment + terminal_points
+        if len(np.argwhere(overlap>1)):
+            terminal_segments[edge_labels == u] = 1
+    return terminal_segments
