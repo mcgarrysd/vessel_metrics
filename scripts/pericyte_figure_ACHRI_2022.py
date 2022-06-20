@@ -40,16 +40,15 @@ vessel_raw = reslice[0]
 vessel_seg = vm.brain_seg(vessel_raw, filter = 'frangi', thresh = 10)
 vessel_preproc = vm.preprocess_seg(vessel_raw)
 vessel_preproc = vm.contrast_stretch(vessel_preproc)
-vm.overlay_segmentation(vessel_top_preproc, vessel_seg)
 
-peri_top_stretch = vm.contrast_stretch(peri_top)
+peri_top_stretch = vm.contrast_stretch(pericyte_raw)
 
 def crop_ventral_brain(im):
     new_im = im[350:650,200:500]
     return  new_im
 
 preproc_crop = crop_ventral_brain(vessel_preproc)
-vessel_crop = crop_ventral_brain(vessel_top_preproc)
+vessel_crop = crop_ventral_brain(vessel_raw)
 seg_crop = crop_ventral_brain(vessel_seg)
 peri_crop = crop_ventral_brain(pericyte_raw)
 

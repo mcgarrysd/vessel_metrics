@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri May 20 10:41:12 2022
+
+hindbrain pericytes
+
+Uses cynthia's data to count pericyte and network length in the hind brain
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from timeit import default_timer as timer
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy import stats
+from copy import deepcopy
+
+#######################################################################
+# Data generation
+data_path = '/media/sean/SP PHD U3/from_home/vm_manuscript/raw_data/VEGFR_Treatment/'
+out_path = '/media/sean/SP PHD U3/from_home/hindbrain_pericyte/'
+generate_data = False
+if generate_data == True:
+    flipped_czi = 1
+    data_list = os.listdir(data_path)
+    for this_file in data_list:
+        volume = vm.preprocess_czi(data_path,this_file, channel = 1)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        pericyte_raw = reslice[0]
+            
+        volume = vm.preprocess_czi(data_path,this_file, channel = 0)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        vessel_raw = reslice[0]
+        
+        if this_file == data_list[flipped_czi]:
+            vessel_copy = deepcopy(vessel_raw)
+            peri_copy = deepcopy(pericyte_raw)
+            
+            vessel_raw = peri_copy
+            pericyte_raw = vessel_copy
+        str_components = this_file.split('.')
+        str_components = str_components[0].split(' ')
+        base_name = str_components[0]+'_'+str_components[1]+'_'+str_components[-2]+'_'+str_components[-1]
+        
+        #os.mkdir(out_path+base_name)
+        cv2.imwrite(out_path+base_name+'/vessel_raw.png', vessel_raw)
+        cv2.imwrite(out_path+base_name+'/pericyte_raw.png', pericyte_raw)
+        
+
+plt.close('all')
+emb_list = os.listdir(out_path)
+peri_number = []
+net_length = []
+for emb in emb_list:
+    vessel_raw = cv2.imread(out_path+emb+'/vessel_raw.png',0)
+    peri_raw = cv2.imread(out_path+emb+'/pericyte_raw.png',0)
+    
+    vessel_seg = vm.brain_seg(vessel_raw, filter = 'frangi', thresh = 20)
+    
+    roi = cv2.selectROI(vessel_raw)
+    cv2.destroyWindow('select')
+    vessel_crop = crop_roi(vessel_raw, roi)
+    peri_crop = crop_roi(peri_raw, roi)
+    seg_crop = crop_roi(vessel_seg, roi)
+    
+    peri_seg = pericyte_seg(peri_crop, seg_crop)
+    
+    vessel_seg_out = vessel_seg*50
+    peri_seg_out = peri_seg*50
+
+    
+    im_path = out_path+emb+'/'
+    cv2.imwrite(im_path+'vessel_seg.png',vessel_seg_out)
+    cv2.imwrite(im_path+'vessel_crop.png',vessel_crop)
+    cv2.imwrite(im_path+'pericyte_crop.png',peri_crop)
+    cv2.imwrite(im_path+'peri_seg.png',peri_seg_out)
+    
+    vm.overlay_segmentation(vessel_crop, seg_crop+peri_seg*2)
+    plt.savefig(im_path+'seg_overlay.png')
+    plt.close('all')
+    num_labels, _ = cv2.connectedComponents(peri_seg.astype(np.uint8))
+    peri_number.append(num_labels)
+    
+    skel, edges, _ = vm.skeletonize_vm(seg_crop)
+    net_length.append(vm.network_length(edges))
+    
+test_emb = emb_list[11]
+vessel_raw = cv2.imread(out_path+test_emb+'/vessel_raw.png',0)
+peri_raw = cv2.imread(out_path+test_emb+'/pericyte_raw.png',0)
+    
+vessel_seg = vm.brain_seg(vessel_raw, filter = 'frangi', thresh = 20)
+roi = cv2.selectROI(vessel_raw)
+
+vessel_crop = vessel_raw[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
+plt.figure(); plt.imshow(vessel_crop)
+
+
+
+def crop_roi(im, roi):
+    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
+    return im_out
+
+def crop_hindbrain(im):
+    x_len = im.shape[0]
+    y_len = im.shape[1]
+    im_crop = im[350:x_len,0:y_len]
+    return im_crop
+
+def pericyte_seg(im,seg):
+    high_vals = np.zeros_like(im)
+    high_vals[im>75] = 1
+    peri_seg = np.zeros_like(im)
+    peri_seg[(high_vals>0) & (seg>0)]=1
+    
+    kernel = np.ones((3,3),np.uint8)
+    peri_seg = cv2.morphologyEx(peri_seg, cv2.MORPH_OPEN, kernel)
+    
+    num_labels, labels = cv2.connectedComponents(peri_seg.astype(np.uint8))
+    
+    unique_labels = np.array(np.nonzero(np.unique(labels))).flatten()
+    
+    reduced_label = np.zeros_like(peri_seg)
+    for u in unique_labels:
+        numel = len(np.argwhere(labels == u))
+        if numel>15 and numel<500:
+            reduced_label[labels == u] = 1
+    return reduced_label
+    

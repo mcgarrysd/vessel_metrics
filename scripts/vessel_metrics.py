@@ -21,6 +21,8 @@ from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
 from skimage.draw import line
 from bresenham import bresenham
+from skimage.util import invert
+from skimage.filters.ridges import compute_hessian_eigenvalues
 import itertools
 from math import dist
 
@@ -186,31 +188,11 @@ def remove_small_objects(label, size_thresh):
         
     return output
 
-def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh = 2):
-    image = cv2.medianBlur(image.astype(np.uint8),7)
-    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
-                                         use_paraboloid=False, do_presmooth=True)
-    im_vector = image.reshape((-1,)).astype(np.float32)
-    
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
-    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_PP_CENTERS)
-    center = center.astype(np.uint8)
-    label_im = label.reshape((image.shape))
-    seg_im = np.zeros_like(label_im)
-    for i in np.unique(label_im):
-        seg_im = np.where(label_im == i, center[i],seg_im)
-    
-    _, seg_im = cv2.threshold(seg_im.astype(np.uint16), bin_thresh, 255, cv2.THRESH_BINARY)
-    
-    _, seg_im = fill_holes(seg_im.astype(np.uint8),hole_size)
-    seg_im = remove_small_objects(seg_im,ditzle_size)
-    
-    return seg_im
-
-def preprocess_seg(image,ball_size = 400, median_size = 7):
-    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+def preprocess_seg(image,ball_size = 400, median_size = 7, upper_lim = 255, lower_lim = 0):
     image, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
                                                             use_paraboloid=False, do_presmooth=True)
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
     return image
 
 def sliding_window(volume,thickness):
@@ -462,8 +444,6 @@ def connect_segments(skel):
     new_bp = new_bp[50:xdim-50, 50:ydim-50]
     return new_edges, new_bp
 
-
-
 def flatten(input_list):
     return [item for sublist in input_list for item in sublist]
 
@@ -608,9 +588,9 @@ def find_connected_segments(bp_labels, edge_labels, bp_num):
 #########################################################
 # brain specific functions
  
-def brain_seg(im, filter = 'meijering', sigmas = range(1,10,2), hole_size = 50, ditzle_size = 500, thresh = 60):
-    im = preprocess_seg(im)
-    im = contrast_stretch(im)
+def brain_seg(im, filter = 'meijering', sigmas = range(1,8,1), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True):
+    if preprocess == True:
+        im = preprocess_seg(im)
     
     if filter == 'meijering':
         enhanced_im = meijering(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
@@ -642,12 +622,34 @@ def crop_brain_im(im,label = None):
         new_label = label[300:750,50:500]
         return new_im, new_label
 
-def network_length(edges):
-    edges[edges>0] = 1
-    net_length = np.sum(edges)
-    return net_length
-
-
+def jerman(im, sigmas = range(1,10,2), tau = 0.75, brightondark = True, cval=0, mode = 'reflect'):
+    if brightondark == False:
+        im = invert(im)
+    vesselness = np.zeros_like(im)
+    for i,sigma in enumerate(sigmas):
+        lambda1, lambda2 = compute_hessian_eigenvalues(im, sigma, sorting='abs', mode=mode, cval=cval)
+        if brightondark == True:
+            lambda2 = -lambda2
+        lambda3 = lambda2
+        
+        lambda_rho = lambda3
+        lambda_rho = np.where((lambda3 >0) & (lambda3<= tau*np.max(lambda3)), tau*np.max(lambda3), lambda_rho)
+        
+        lambda_rho[lambda3<0]=0
+        
+        response = np.zeros_like(lambda1)
+        response = lambda2*lambda2*(lambda_rho-lambda2)*27/np.power(lambda2+lambda_rho,3)
+        
+        response = np.where((lambda2>=lambda_rho/2) & (lambda_rho>0),1,response)
+        response = np.where((lambda2<=0) | (lambda_rho<=0),0,response)
+        
+        if i == 0:
+            vesselness = response
+        else:
+            vesselness = np.maximum(vesselness, response)
+    vesselness = vesselness/np.max(vesselness)
+    vesselness[vesselness<0.001]=0
+    return vesselness
 #####################################################################
 # Diameter
 
@@ -844,4 +846,24 @@ def fwhm_diameter(cross_vals):
 #####################################################################
 # DEPRECATED
 
+def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh = 2):
+    image = cv2.medianBlur(image.astype(np.uint8),7)
+    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
+                                         use_paraboloid=False, do_presmooth=True)
+    im_vector = image.reshape((-1,)).astype(np.float32)
+    
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_PP_CENTERS)
+    center = center.astype(np.uint8)
+    label_im = label.reshape((image.shape))
+    seg_im = np.zeros_like(label_im)
+    for i in np.unique(label_im):
+        seg_im = np.where(label_im == i, center[i],seg_im)
+    
+    _, seg_im = cv2.threshold(seg_im.astype(np.uint16), bin_thresh, 255, cv2.THRESH_BINARY)
+    
+    _, seg_im = fill_holes(seg_im.astype(np.uint8),hole_size)
+    seg_im = remove_small_objects(seg_im,ditzle_size)
+    
+    return seg_im
 

@@ -44,7 +44,7 @@ if generate_data:
         
         cv2.imwrite(output_path +im_name, this_slice)
 
-data_path = '/media/sean/0012-D687/from_home/vm_manuscript/vegf/'
+data_path = '/media/sean/SP PHD U3/from_home/vm_manuscript/vegf/'
 data_list = os.listdir(data_path)
 img_list = []
 time_pt = []

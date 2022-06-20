@@ -17,7 +17,7 @@ from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
 from skimage.morphology import skeletonize
 
-data_path = '/home/sean/Documents/vm_manuscript/E1_combined/'
+data_path = '/media/sean/SP PHD U3/from_home/vm_manuscript/E1_segmentation/'
 
 label_list = []
 im_list = []
@@ -33,8 +33,7 @@ area_list = []
 length_list = []
 jacc_list = []
 for im, label in zip(im_list, label_list):
-    seg = vm.brain_seg(label)
-    seg_list.append(seg.astype(np.uint8))
+    seg = vm.brain_seg(im, filter = 'frangi', thresh = 20)
     
     length, area, conn = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))
     conn_list.append(conn)
@@ -42,6 +41,179 @@ for im, label in zip(im_list, label_list):
     length_list.append(length)
     jacc_list.append(vm.jaccard(label, seg))
     
+##############################################################################
+    
+c_f20 = []
+a_f20 = []
+l_f20 = []
+j_f20 = []
+
+c_f10 = []
+a_f10 = []
+l_f10 = []
+j_f10 = []
+
+c_f40 = []
+a_f40 = []
+l_f40 = []
+j_f40 = []
+
+c_f60 = []
+a_f60 = []
+l_f60 = []
+j_f60 = []
+
+c_s60 = []
+a_s60 = []
+l_s60 = []
+j_s60 = []
+
+c_m60 = []
+a_m60 = []
+l_m60 = []
+j_m60 = []
+
+c_j20 = []
+a_j20 = []
+l_j20 = []
+j_j20 = []
+
+for im, label in zip(im_list, label_list):
+    seg_f20 = vm.brain_seg(im, filter = 'frangi', thresh = 20, preprocess = False, ditzle_size = 1000)
+    seg_f10 = vm.brain_seg(im, filter = 'frangi', thresh = 10, preprocess = False, ditzle_size = 1000)
+    seg_f40 = vm.brain_seg(im, filter = 'frangi', thresh = 40, preprocess = False, ditzle_size = 1000)
+    seg_f60 = vm.brain_seg(im, filter = 'frangi', thresh = 60, preprocess = False, ditzle_size = 1000)    
+
+    seg_s60 = vm.brain_seg(im, filter = 'sato', thresh = 60, preprocess = False, ditzle_size = 1000)
+    seg_m60 = vm.brain_seg(im, filter = 'meijering', thresh = 60, preprocess = False, ditzle_size = 1000)
+    seg_j20 = vm.brain_seg(im, filter = 'jerman', thresh = 20, preprocess = False, ditzle_size = 1000)
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_f20.astype(np.uint8))
+    l_f20.append(length); c_f20.append(conn); a_f20.append(area)
+    j_f20.append(vm.jaccard(label, seg_f20))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_f10.astype(np.uint8))
+    l_f10.append(length); c_f10.append(conn); a_f10.append(area)
+    j_f10.append(vm.jaccard(label, seg_f10))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_f40.astype(np.uint8))
+    l_f40.append(length); c_f40.append(conn); a_f40.append(area)
+    j_f40.append(vm.jaccard(label, seg_f40))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_f60.astype(np.uint8))
+    l_f60.append(length); c_f60.append(conn); a_f60.append(area)
+    j_f60.append(vm.jaccard(label, seg_f60))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_s60.astype(np.uint8))
+    l_s60.append(length); c_s60.append(conn); a_s60.append(area)
+    j_s60.append(vm.jaccard(label, seg_s60))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_m60.astype(np.uint8))
+    l_m60.append(length); c_m60.append(conn); a_m60.append(area)
+    j_m60.append(vm.jaccard(label, seg_m60))
+    
+    length, area, conn = vm.cal(label.astype(np.uint8), seg_j20.astype(np.uint8))
+    l_j20.append(length); c_j20.append(conn); a_j20.append(area)
+    j_j20.append(vm.jaccard(label, seg_j20))
+
+
+plt.close('all')
+vm.overlay_segmentation(im, seg_f10)
+vm.overlay_segmentation(im, seg_f20)
+vm.overlay_segmentation(im, seg_f40)
+vm.overlay_segmentation(im, seg_f60)
+
+test_im = im_list[10]
+
+plt.close('all')
+seg_nt_list = []
+for im in im_list:
+    seg_temp = seg_no_thresh(im, filter = 'frangi', preprocess = False)
+    seg_nt_list.append(seg_temp)
+    plt.figure(); plt.imshow(seg_temp)
+
+
+def seg_no_thresh(im, filter = 'meijering', sigmas = range(1,8,1), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True):
+    if preprocess == True:
+        im = preprocess_seg(im)
+    
+    if filter == 'meijering':
+        enhanced_im = meijering(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'sato':
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'frangi':
+        enhanced_im = frangi(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'jerman':
+        enhanced_im = jerman(im, sigmas = sigmas, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+    norm = np.round(enhanced_im/np.max(enhanced_im)*255).astype(np.uint8)
+    
+    enhanced_label = np.zeros_like(norm)
+    enhanced_label[norm>thresh] =1
     
     
+    kernel = np.ones((6,6),np.uint8)
+    label = cv2.morphologyEx(enhanced_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
     
+    _, label = fill_holes(label.astype(np.uint8),hole_size)
+    label = remove_small_objects(label,ditzle_size)
+    
+    return norm
+
+seg_meij = seg_no_thresh(im,'meijering', preprocess = False)
+seg_frangi = seg_no_thresh(im,'frangi', preprocess = False)
+seg_jerman = seg_no_thresh(im,'jerman', preprocess = False)
+seg_sato = seg_no_thresh(im,'sato', preprocess = False)
+
+plt.figure(); plt.imshow(seg_meij, cmap = 'gray')
+plt.figure(); plt.imshow(seg_frangi, cmap = 'gray')
+plt.figure(); plt.imshow(seg_jerman, cmap = 'gray')
+plt.figure(); plt.imshow(seg_sato, cmap = 'gray')
+plt.figure(); plt.imshow(im, cmap = 'gray')
+
+j_m20 = []
+j_m40 = []
+j_m60 = []
+j_m80 = []
+for im, label in zip(im_list, label_list):
+    seg_m20 = vm.brain_seg(im, filter = 'meijering', thresh = 20, preprocess = False)
+    seg_m40 = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False)
+    seg_m60 = vm.brain_seg(im, filter = 'meijering', thresh = 60, preprocess = False)
+    seg_m80 = vm.brain_seg(im, filter = 'meijering', thresh = 80, preprocess = False)    
+    
+    j_m20.append(vm.jaccard(label, seg_m20))
+    j_m40.append(vm.jaccard(label, seg_m40))
+    j_m60.append(vm.jaccard(label, seg_m60))
+    j_m80.append(vm.jaccard(label, seg_m80))
+
+plt.close('all')
+vm.overlay_segmentation(im, seg_m20)
+vm.overlay_segmentation(im, seg_m40)
+vm.overlay_segmentation(im, seg_m60)
+vm.overlay_segmentation(im, seg_m80)
+
+j_m20_mean = np.mean(j_m20)
+j_m40_mean = np.mean(j_m40)
+j_m60_mean = np.mean(j_m60)
+j_m80_mean = np.mean(j_m80)
+
+
+
+j_d500 = []
+j_d750 = []
+j_d1000 = []
+j_d1250 = []
+for im, label in zip(im_list, label_list):
+    seg_d500 = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False, ditzle_size = 500)
+    seg_d750 = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False, ditzle_size = 750)
+    seg_d1000 = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False, ditzle_size = 1000)
+    seg_d1250 = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False, ditzle_size = 1250)    
+    
+    j_d500.append(vm.jaccard(label, seg_d500))
+    j_d750.append(vm.jaccard(label, seg_d750))
+    j_d1000.append(vm.jaccard(label, seg_d1000))
+    j_d1250.append(vm.jaccard(label, seg_d1250))
+    
+plt.figure(); plt.imshow(seg_d500*2+label2)
+plt.figure(); plt.imshow(seg_d750*2+label2)
+plt.figure(); plt.imshow(seg_d1000*2+label2)
+plt.figure(); plt.imshow(seg_d1250*2+label2)
