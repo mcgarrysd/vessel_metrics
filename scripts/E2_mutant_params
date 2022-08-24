@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 10 11:23:12 2022
+
+vm_E2_mutant_params
+
+@author: sean
+"""
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy.stats import ttest_ind
+
+
+data_path = '/home/sean/Documents/vm_manuscript/SE1_IWR_treatment/data/'
+
+label_list = []
+im_list = []
+data_files = os.listdir(data_path)
+
+class_list = []
+for file in data_files:
+    if 'DMSO' in file:
+        class_list.append('DMSO')
+    else:
+        class_list.append('IWR')
+    label_list.append(cv2.imread(data_path+file+'/label.png',0))
+    im_list.append(cv2.imread(data_path+file+'/img.png',0))
+ 
+seg_list = []
+seg_count_auto_list = []
+seg_count_manual_list = []
+vd_manual_list = []
+vd_auto_list = []
+bpd_auto_list = []
+bpd_manual_list = []
+vessel_length_auto = []
+vessel_length_manual = []
+length_list_a = []
+length_list_m = []
+bpd_a_nz = []
+bpd_m_nz = []
+mean_length_auto = []
+mean_length_manual = []
+count = 0
+for im, label in zip(im_list, label_list):
+    print(count)
+    seg = vm.brain_seg(im)
+    seg_list.append(seg.astype(np.uint8))
+    
+    label[label>0] = 1
+    auto_skel = skeletonize(seg)
+    edges_a, bp_a = vm.connect_segments(auto_skel)
+    
+    manual_skel = skeletonize(label)
+    edges_m, bp_m = vm.connect_segments(manual_skel)
+    
+    #edges_m, bp_m = vm.find_branchpoints(manual_skel)
+    seg_count_m, edge_labels_m = cv2.connectedComponents(edges_m)
+    
+    #edges_a, bp_a = vm.find_branchpoints(auto_skel)
+    seg_count_a, edge_labels_a = cv2.connectedComponents(edges_a)
+    
+    seg_count_auto_list.append(seg_count_a)
+    seg_count_manual_list.append(seg_count_m)
+    
+    _, vessel_density_m = vm.vessel_density(im, label, 16, 16)
+    _, vessel_density_a = vm.vessel_density(im, seg, 16, 16)
+    
+    vessel_density_m = np.array(vessel_density_m)
+    vessel_density_a = np.array(vessel_density_a)
+    
+    vessel_density_m_mean = np.mean(vessel_density_m[vessel_density_m>0])
+    vessel_density_a_mean = np.mean(vessel_density_a[vessel_density_a>0])
+    
+    vd_manual_list.append(vessel_density_m_mean)
+    vd_auto_list.append(vessel_density_a_mean)
+    
+    bp_density_a = vm.branchpoint_density(auto_skel, seg)
+    bp_density_m = vm.branchpoint_density(manual_skel, label)
+    
+    bpd_num_zeros_a = np.count_nonzero(bp_density_a == 0)
+    bpd_num_zeros_m = np.count_nonzero(bp_density_m == 0)
+    
+    bpd_a_nz.append(bpd_num_zeros_a)
+    bpd_m_nz.append(bpd_num_zeros_m)
+    
+    bpd_auto_list.append(np.mean(bp_density_a[np.nonzero(bp_density_a)]))
+    bpd_manual_list.append(np.mean(bp_density_m[np.nonzero(bp_density_m)]))
+    
+    _, length_auto = vm.vessel_length(edge_labels_a)
+    _, length_manual = vm.vessel_length(edge_labels_m)
+    
+    mean_length_auto.append(np.mean(length_auto))
+    mean_length_manual.append(np.mean(length_manual))
+    
+    count+=1
+dmso_inds = []
+iwr_inds = []
+for i in range(len(class_list)):
+    if class_list[i] == 'DMSO':
+        dmso_inds.append(i)
+    else:
+        iwr_inds.append(i)
+
+seg_count_iwr = [seg_count_auto_list[i] for i in iwr_inds]
+seg_count_dmso = [seg_count_auto_list[i] for i in dmso_inds]
+
+bpd_iwr = [bpd_auto_list[i] for i in iwr_inds]
+bpd_dmso = [bpd_auto_list[i] for i in dmso_inds]
+
+bpd_0_iwr = [bpd_a_nz[i] for i in iwr_inds]
+bpd_0_dmso = [bpd_a_nz[i] for i in dmso_inds]
+
+vd_iwr = [vd_auto_list[i] for i in iwr_inds]
+vd_dmso = [vd_auto_list[i] for i in dmso_inds]
+
+length_iwr = [mean_length_auto[i] for i in iwr_inds]
+length_dmso = [mean_length_auto[i] for i in dmso_inds]
+
+_,p_seg = ttest_ind(seg_count_iwr, seg_count_dmso)
+_,p_bpd = ttest_ind(bpd_iwr, bpd_dmso)
+_,p_bpd0 = ttest_ind(bpd_0_iwr, bpd_0_dmso)
+_,p_vd = ttest_ind(vd_iwr, vd_dmso)
+_,p_len = ttest_ind(length_iwr, length_dmso)
+
+_,p_seg_all = ttest_ind(seg_count_auto_list, seg_count_manual_list)
+_,p_vd_all = ttest_ind(vd_auto_list, vd_manual_list)
+_,p_bpd_all = ttest_ind(bpd_auto_list, bpd_manual_list)
+_,p_bpd0_all = ttest_ind(bpd_a_nz, bpd_m_nz)
+_,p_len_all = ttest_ind(mean_length_auto, mean_length_manual)

@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Feb 28 12:24:21 2022
+
+Analyzes time point data from Cynthia
+
+@author: sean
+"""
+
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+import pandas as pd
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from copy import deepcopy
+
+
+generate_data = False
+if generate_data:
+    data_path = '/home/sean/Documents/vm_manuscript/raw_data/brain_images_timepoints/'
+    output_path = '/home/sean/Documents/vm_manuscript/timepoints/'
+    time_pts = ['5dpf', '6dpf', '7dpf']
+    
+    for this_time in time_pts:
+        data_list = os.listdir(data_path+this_time+'/')
+        for file in data_list:
+            volume = vm.preprocess_czi(data_path+this_time+'/'+file,'', channel = 1)
+            slice_range = len(volume)
+            slice_thickness = np.round(slice_range/2).astype(np.uint8)
+            reslice = vm.reslice_image(volume,slice_thickness)
+            this_slice = reslice[0]
+            
+            emb_num = file.split(' ')
+            emb_num = emb_num[-1][0]
+            im_name = this_time+'_'+emb_num+'.png'
+            
+            cv2.imwrite(output_path +im_name, this_slice)
+            
+            
+    # 3dpf data
+    data_path = '/home/sean/Documents/Data/Wnt_Treatment/Nov2/'
+    output_path = '/home/sean/Documents/vm_manuscript/timepoints/'
+    data_list = os.listdir(data_path) 
+    data_list = [data_list[2], data_list[3], data_list[5]] # 3 DMSO samples
+    emb_num = 1; this_time = '3dpf'
+    for file in data_list:
+        volume = vm.preprocess_czi(data_path+file,'', channel = 1)
+        slice_range = len(volume)
+        slice_thickness = np.round(slice_range/2).astype(np.uint8)
+        reslice = vm.reslice_image(volume,slice_thickness)
+        this_slice = reslice[0]
+        
+        im_name = this_time+'_'+str(emb_num)+'.png'
+        
+        cv2.imwrite(output_path +im_name, this_slice)
+        emb_num+=1
+    
+data_path = '/home/sean/Documents/vm_manuscript/timepoints/'
+img_list = []
+time_pt = []
+preproc_list = []
+seg_list = []
+skel_list=[]
+bp_list = []
+edges_list = []
+seg_count_list = []
+net_length_list = []
+vessel_density_list = []
+bpd_list = []
+length_list = []
+data_list = os.listdir(data_path)
+for file in data_list:
+    print(file)
+    im = cv2.imread(data_path+file,0)
+    img_list.append(im)
+    im_preproc = vm.contrast_stretch(im)
+    im_preproc = vm.preprocess_seg(im_preproc)
+    preproc_list.append(im_preproc)
+    seg = vm.segment_vessels(im)
+    seg_list.append(seg)
+    t = file.split('_')
+    time_pt.append(t[0])
+    skel = skeletonize(seg)
+    skel_list.append(skel)
+    edges, bp = connect_segments(skel)
+    edges_list.append(edges)
+    bp_list.append(bp)
+    seg_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    seg_count_list.append(seg_count)
+    net_length = vm.network_length(edges)
+    net_length_list.append(net_length)
+
+    _, vessel_density = vm.vessel_density(im, seg, 16, 16)
+    vessel_density = np.array(vessel_density)
+    vessel_density_mean = np.mean(vessel_density[vessel_density>0])
+    vessel_density_list.append(vessel_density_mean)
+    
+    bp_density = vm.branchpoint_density(skel, seg)
+    bpd_list.append(np.mean(bp_density[np.nonzero(bp_density)]))
+    
+    _, length = vm.vessel_length(edge_labels)
+    length_list.append(np.mean(length))
+    
+cols = ['time', 'segment count', 'network length', 'vessel_density', 'branchpoint density', 'mean length']
+df = pd.DataFrame(list(zip(time_pt,seg_count_list,net_length_list,vessel_density_list, bpd_list, length_list)),columns = cols) 
+plt.figure()
+df.boxplot(column = 'network length', by = 'time')
+plt.figure()
+df.boxplot(column = 'segment count', by = 'time')
+plt.figure()
+df.boxplot(column = 'vessel_density', by = 'time')
+plt.figure()
+df.boxplot(column = 'branchpoint density', by = 'time')
+plt.figure()
+df.boxplot(column = 'mean length', by = 'time')
+
+i = 41
+
+def connect_segments(skel):
+    skel = np.pad(skel,50)
+    edges, bp = vm.find_branchpoints(skel)
+    _,edge_labels = cv2.connectedComponents(edges)
+    
+    edge_labels[edge_labels!=0]+=1
+    bp_el = edge_labels+bp
+    
+    _, bp_labels = cv2.connectedComponents(bp)
+    unique_bp = np.unique(bp_labels)
+    unique_bp = unique_bp[1:]
+    
+    bp_list = []
+    bp_connections = []
+    new_edges = np.zeros_like(skel)
+    new_bp = np.zeros_like(skel)
+    for i in unique_bp:
+        #print('branch point ' + str(i))
+        temp_bp = np.zeros_like(bp_labels)
+        temp_bp[bp_labels == i] = 1
+        bp_size = np.sum(temp_bp)
+        if bp_size>1:
+            branchpoint_viz = deepcopy(edge_labels)
+            branchpoint_viz = temp_bp*300 + branchpoint_viz
+            
+            this_bp_inds = np.argwhere(temp_bp == 1)
+            
+            connected_segs = []
+            bp_coords = []
+            for x,y in this_bp_inds:
+                bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+                if np.any(bp_neighbors>1):
+                    connections = bp_neighbors[bp_neighbors>1].tolist()
+                    connected_segs.append(connections)
+                    for c in connections:    
+                        bp_coords.append((x,y))
+            bp_list.append(i)
+            bp_connections.append(connected_segs)
+            connected_segs = flatten(connected_segs)
+            
+            vx = []
+            vy = []
+            for seg in connected_segs:
+                #print('segment ' + str(seg))
+                temp_seg = np.zeros_like(bp_labels)
+                temp_seg[edge_labels == seg] = 1
+                endpoint_im = vm.find_endpoints(temp_seg)
+                endpoints = np.argwhere(endpoint_im>0)
+                if np.size(endpoints):
+                    line = cv2.fitLine(endpoints,cv2.DIST_L2,0,0.1,0.1)
+                    vx.append(float(line[0]))
+                    vy.append(float(line[1]))
+                
+            vx = np.array(vx).flatten().tolist()
+            vy = np.array(vy).flatten().tolist()
+            
+            
+            v_r = list(zip(np.round(vx,3), np.round(vy,3)))
+            slope_tolerance = 0.1
+            
+            inds = list(range(len(v_r)))
+            pair_inds = list(itertools.combinations(inds, 2))
+            count = 0
+            match = []
+            for x,y in itertools.combinations(v_r, 2):
+                if np.abs(x[0] - y[0])<slope_tolerance:
+                    if np.abs(x[1]-y[1])<slope_tolerance:
+                      match = pair_inds[count]
+                count+=1
+                
+            if match:
+                c1 = bp_coords[match[0]]
+                c2 = bp_coords[match[1]]
+                connected_pts = list(bresenham(c1[0],c1[1],c2[0],c2[1]))
+                temp_edges = np.zeros_like(bp_labels)
+                temp_bp = np.zeros_like(bp_labels)
+                for x,y in connected_pts:
+                    temp_edges[x,y] = 1
+                new_edges = new_edges+temp_edges
+                for x,y in this_bp_inds:
+                    if temp_edges[x,y] == 0:
+                        bp_neighbors = edges[x-1:x+2,y-1:y+2]
+                        if np.any(bp_neighbors>0):
+                            temp_bp[x,y] = 1
+                new_bp = temp_bp+new_bp
+            else:
+                new_bp = new_bp + temp_bp
+        else:
+            new_bp = new_bp + temp_bp
+    new_edges = new_edges + edges 
+    xdim, ydim = np.shape(skel)
+    
+    new_edges = new_edges[50:xdim-50, 50:ydim-50]
+    new_bp = new_bp[50:xdim-50, 50:ydim-50]
+    return new_edges, new_bp
+
+    
+    

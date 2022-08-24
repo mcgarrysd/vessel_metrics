@@ -20,7 +20,11 @@ from czifile import CziFile
 from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
 from skimage.draw import line
-
+from bresenham import bresenham
+from skimage.util import invert
+from skimage.filters.ridges import compute_hessian_eigenvalues
+import itertools
+from math import dist
 
 def fill_holes(label_binary, hole_size):
     label_inv = np.bitwise_not(label_binary)
@@ -34,7 +38,7 @@ def fill_holes(label_binary, hole_size):
         inverted_labels[inverted_labels == v] = 0
         
     label_mask = np.zeros_like(label_inv)
-    label_mask[inverted_labels==0] = 1 
+    label_mask[inverted_labels==0] = 1
     
     skel = skeletonize(label_mask)
     return skel, label_mask
@@ -107,7 +111,8 @@ def find_endpoints(edges):
         neighborhood_image[i,j] = np.sum(this_tile)
     end_points = np.zeros_like(neighborhood_image)
     end_points[neighborhood_image == 2] = 1
-    return end_points
+    coords = np.argwhere(end_points==1)
+    return coords, end_points
 
 def vessel_length(edge_labels):
     unique_segments, segment_counts = np.unique(edge_labels, return_counts = True)
@@ -145,6 +150,10 @@ def find_terminal_segments(skel, edge_labels):
             terminal_segments[edge_labels == u] = 1
     return terminal_segments
 
+def show_im(im):
+    plt.figure()
+    plt.imshow(im, cmap = 'gray')
+
 def preprocess_czi(input_directory,file_name, channel = 0):
     with CziFile(input_directory + file_name) as czi:
         image_arrays = czi.asarray()
@@ -163,8 +172,7 @@ def segment_chunk(segment_number, edge_labels, volume):
     this_segment = np.zeros_like(edge_labels)
     this_segment[edge_labels == segment_number] = 1
     this_segment = this_segment.astype(np.uint8)
-    end_points = find_endpoints(this_segment)
-    end_inds = np.argwhere(end_points>0)
+    end_inds, end_points = find_endpoints(this_segment)
     mid_point = np.round(np.mean(end_inds, axis = 0)).astype(np.uint64)
     tile_size = np.abs(np.array([np.shape(volume)[0],end_inds[0,0]-end_inds[1,0], end_inds[0,1]-end_inds[1,1]])*1.5).astype(np.uint8)
     chunk = volume[:,mid_point[0]-tile_size[0]:mid_point[0]+tile_size[0], mid_point[1]-tile_size[1]:mid_point[1]+tile_size[1]]
@@ -184,31 +192,11 @@ def remove_small_objects(label, size_thresh):
         
     return output
 
-def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh = 2):
-    image = cv2.medianBlur(image.astype(np.uint8),7)
-    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
-                                         use_paraboloid=False, do_presmooth=True)
-    im_vector = image.reshape((-1,)).astype(np.float32)
-    
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
-    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_PP_CENTERS)
-    center = center.astype(np.uint8)
-    label_im = label.reshape((image.shape))
-    seg_im = np.zeros_like(label_im)
-    for i in np.unique(label_im):
-        seg_im = np.where(label_im == i, center[i],seg_im)
-    
-    _, seg_im = cv2.threshold(seg_im.astype(np.uint16), bin_thresh, 255, cv2.THRESH_BINARY)
-    
-    _, seg_im = fill_holes(seg_im.astype(np.uint8),hole_size)
-    seg_im = remove_small_objects(seg_im,ditzle_size)
-    
-    return seg_im
-
-def preprocess_seg(image,ball_size = 400, median_size = 7):
-    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+def preprocess_seg(image,ball_size = 400, median_size = 7, upper_lim = 255, lower_lim = 0):
     image, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
                                                             use_paraboloid=False, do_presmooth=True)
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
     return image
 
 def sliding_window(volume,thickness):
@@ -289,7 +277,9 @@ def cal(ground_truth, label):
     
     length = round(length_numerator/length_denominator,2)
     
-    return length, area,  connectivity
+    Q = connectivity*length*area
+    
+    return length, area,  connectivity, Q
 
 def seg_holes(label):
     label_inv = np.zeros_like(label)
@@ -369,22 +359,320 @@ def reslice_image(image,thickness):
         count+=1
     return output
 
+def connect_segments(skel):
+    skel = np.pad(skel,50)
+    edges, bp = find_branchpoints(skel)
+    _,edge_labels = cv2.connectedComponents(edges)
+    
+    edge_labels[edge_labels!=0]+=1
+    bp_el = edge_labels+bp
+    
+    _, bp_labels = cv2.connectedComponents(bp)
+    unique_bp = np.unique(bp_labels)
+    unique_bp = unique_bp[1:]
+    
+    bp_list = []
+    bp_connections = []
+    new_edges = np.zeros_like(skel)
+    new_bp = np.zeros_like(skel)
+    for i in unique_bp:
+        temp_bp = np.zeros_like(bp_labels)
+        temp_bp[bp_labels == i] = 1
+        bp_size = np.sum(temp_bp)
+        if bp_size>1:
+            this_bp_inds = np.argwhere(temp_bp == 1)
+            
+            connected_segs = []
+            bp_coords = []
+            for x,y in this_bp_inds:
+                bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+                if np.any(bp_neighbors>1):
+                    connections = bp_neighbors[bp_neighbors>1].tolist()
+                    connected_segs.append(connections)
+                    for c in connections:    
+                        bp_coords.append((x,y))
+            bp_list.append(i)
+            bp_connections.append(connected_segs)
+            connected_segs = flatten(connected_segs)
+            
+            vx = []
+            vy = []
+            for seg in connected_segs:
+                #print('segment ' + str(seg))
+                temp_seg = np.zeros_like(bp_labels)
+                temp_seg[edge_labels == seg] = 1
+                endpoints, endpoint_im = find_endpoints(temp_seg)
+                if np.size(endpoints):
+                    line = cv2.fitLine(endpoints,cv2.DIST_L2,0,0.1,0.1)
+                    vx.append(float(line[0]))
+                    vy.append(float(line[1]))
+                
+            vx = np.array(vx).flatten().tolist()
+            vy = np.array(vy).flatten().tolist()
+            
+            
+            v_r = list(zip(np.round(vx,3), np.round(vy,3)))
+            slope_tolerance = 0.1
+            
+            inds = list(range(len(v_r)))
+            pair_inds = list(itertools.combinations(inds, 2))
+            count = 0
+            match = []
+            for x,y in itertools.combinations(v_r, 2):
+                if np.abs(x[0] - y[0])<slope_tolerance:
+                    if np.abs(x[1]-y[1])<slope_tolerance:
+                      match = pair_inds[count]
+                count+=1
+                
+            if match:
+                c1 = bp_coords[match[0]]
+                c2 = bp_coords[match[1]]
+                connected_pts = list(bresenham(c1[0],c1[1],c2[0],c2[1]))
+                temp_edges = np.zeros_like(bp_labels)
+                temp_bp = np.zeros_like(bp_labels)
+                for x,y in connected_pts:
+                    temp_edges[x,y] = 1
+                new_edges = new_edges+temp_edges
+                for x,y in this_bp_inds:
+                    if temp_edges[x,y] == 0:
+                        bp_neighbors = edges[x-1:x+2,y-1:y+2]
+                        if np.any(bp_neighbors>0):
+                            temp_bp[x,y] = 1
+                new_bp = temp_bp+new_bp
+            else:
+                new_bp = new_bp + temp_bp
+        else:
+            new_bp = new_bp + temp_bp
+    new_edges = new_edges + edges
+    xdim, ydim = np.shape(skel)
+    
+    new_edges = new_edges[50:xdim-50, 50:ydim-50]
+    new_bp = new_bp[50:xdim-50, 50:ydim-50]
+    return new_edges, new_bp
+
+def flatten(input_list):
+    return [item for sublist in input_list for item in sublist]
+
+def network_length(edges):
+    edges[edges>0]=1
+    net_length = np.sum(edges)
+    return net_length
+
+def prune_terminal_segments(skel, seg_thresh = 20):
+    edges, bp = connect_segments(skel)
+    _, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    _, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    
+    terminal_segs = find_terminal_segments(skel, edge_labels)
+    new_terminal_segs = np.zeros_like(terminal_segs)
+    _, term_labels = cv2.connectedComponents(terminal_segs.astype(np.uint8))
+    unique_labels = np.unique(term_labels)[1:] # omit 0
+    removed_count = 0
+    null_points = np.zeros_like(terminal_segs)
+    for u in unique_labels:
+        temp_seg = np.zeros_like(terminal_segs)
+        temp_seg[term_labels == u] = 1
+        seg_inds = np.argwhere(term_labels == u)
+        seg_length = np.shape(seg_inds)[0]
+        if seg_length<seg_thresh:
+            endpoint_inds, endpoints = find_endpoints(temp_seg)
+            for i in endpoint_inds:
+                endpoint_neighborhood = bp_labels[i[0]-1:i[0]+2, i[1]-1:i[1]+2]
+                if np.any(endpoint_neighborhood>0):
+                    neighborhood = np.zeros_like(terminal_segs)
+                    neighborhood[i[0]-1:i[0]+2, i[1]-1:i[1]+2] = 1
+                    null_inds = np.argwhere((neighborhood == 1) & (bp_labels>0))[0]
+                    null_points[null_inds[0],null_inds[1]] = 1
+            null_points[term_labels==u] = 1
+            removed_count+=1
+            print(str(u) + ' removed due to length')
+    new_skel = skel-null_points
+    new_skel[new_skel<0] = 0
+    new_skel[new_skel>0] = 1
+    edges, bp = connect_segments(new_skel)
+    return edges, bp, new_skel
+
+def fix_skel_artefacts(skel):
+    edges, bp = find_branchpoints(skel)
+    edge_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    new_edge_num = edge_count+1
+    for i in range(1,bp_count):
+        connected_segs = find_connected_segments(bp_labels, edge_labels, i)
+        print('bp ' + str(i) + '/'+str(bp_count))
+        if len(connected_segs)==2:
+            print(str(i)+ ' has 2 connections')
+            coord_list = []
+            bp_conns = np.zeros_like(edges)
+            for c in connected_segs:
+                bp_conns[edge_labels == c] = c
+                temp_seg = np.zeros_like(edges)
+                temp_seg[edge_labels == c] = 1
+                coords, endpoints = find_endpoints(temp_seg)
+                coord_list.append(coords)
+            lowest_dist = 500
+            for x in coord_list[0]:
+                for y in coord_list[1]:
+                    this_dist = dist(x,y)
+                    if this_dist<lowest_dist:
+                        lowest_dist = this_dist
+                        end1, end2 = x,y
+            bp_labels[bp_labels == i] = 0
+            
+            rr, cc = line(end1[0],end1[1],end2[0],end2[1])
+            for r,c in zip(rr,cc):
+                edge_labels[r,c] = new_edge_num #
+                
+    new_edges = np.zeros_like(edge_labels)
+    new_bp = np.zeros_like(edge_labels)
+    
+    new_edges[edge_labels>0]=1
+    new_bp[bp_labels>0]=1
+    
+    new_skel = new_edges+new_bp
+    edge_count, edge_labels = cv2.connectedComponents(new_edges.astype(np.uint8))
+    bp_count, bp_labels = cv2.connectedComponents(new_bp.astype(np.uint8))
+    
+    for i in range(1,edge_count):
+        bp_num = branchpoints_per_seg(skel, edge_labels, bp, i)
+        temp_seg = np.zeros_like(edges)
+        temp_seg[edge_labels == i] =1
+        seg_inds = np.argwhere(temp_seg==1)
+        seg_length = np.shape(seg_inds)[0]
+        if (bp_num <2) and (seg_length<10):
+            print('removing seg ' + str(i) + ' of length ' + str(seg_length))
+            for x,y in seg_inds:
+                edge_labels[x,y] = 0
+    
+    new_skel = edge_labels+new_bp
+    new_skel[new_skel>0] = 1
+    new_edges, new_bp = find_branchpoints(new_skel)
+    return new_edges, new_bp
+    
+def skeletonize_vm(label):
+    skel = skeletonize(label)
+    _,_, skel = prune_terminal_segments(skel)
+    edges, bp = fix_skel_artefacts(skel)
+    new_skel = edges+bp
+    return new_skel, edges, bp
+
+def branchpoints_per_seg(skel, edge_labels, bp, seg_num):
+    bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    bp_labels = bp_labels+1
+    bp_labels[bp_labels<2]=0
+    temp_seg = np.zeros_like(skel)
+    temp_seg[edge_labels==seg_num]=1
+    temp_seg = temp_seg+bp_labels
+    seg_inds = np.argwhere(temp_seg==1)
+    seg_lenth = np.shape(seg_inds)[0]
+    bp_num = 0
+    for i in seg_inds:
+        this_tile = temp_seg[i[0]-1:i[0]+2,i[1]-1:i[1]+2]
+        unique_bps = np.unique(this_tile)
+        unique_bps = np.sum(unique_bps>1)
+        bp_num = bp_num + unique_bps
+    return bp_num
+
+def find_connected_segments(bp_labels, edge_labels, bp_num):
+    this_bp_inds = np.argwhere(bp_labels == bp_num)
+    temp_bp = np.zeros_like(bp_labels)
+    for i in this_bp_inds:
+        temp_bp[i[0],i[1]]=-1
+    bp_el = edge_labels+temp_bp
+    connected_segs = []
+    bp_coords = []
+    for x,y in this_bp_inds:
+        bp_neighbors = bp_el[x-1:x+2,y-1:y+2]
+        if np.any(bp_neighbors>0):
+            connections = bp_neighbors[bp_neighbors>0].tolist()
+            connected_segs.append(connections)
+            for c in connections:    
+                bp_coords.append((x,y))
+    connected_segs = flatten(connected_segs)
+    return connected_segs
+
+def generate_roi(im):
+    roi = cv2.selectROI(im.astype(np.uint8))
+    cv2.destroyWindow('select')
+    return roi
+
+def crop_roi(im, roi):
+    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
+    return im_out
+
+def scatter_boxplot(df, group, column, alpha = 0.4):
+    grouped = df.groupby(group)
+    names, vals, xs = [],[],[]
+    for i, (name, subdf) in enumerate(grouped):
+        names.append(name)
+        vals.append(subdf[column].tolist())
+        xs.append(np.random.normal(i+1, 0.04, subdf.shape[0]))
+    plt.figure()   
+    plt.title = 'test'
+    plt.boxplot(vals, labels = names, showfliers=False)
+    ngroup = len(vals)
+    clevels = np.linspace(0., 1., ngroup)
+
+    for x, val, clevel in zip(xs, vals, clevels):
+        plt.scatter(x, val, c = plt.cm.prism(clevel), alpha = 0.4)
+
+def subtract_local_mean(im,size = 8):
+    y_stop = False
+    x_stop = False
+    num_steps_x = np.floor(im.shape[0]/size).astype(np.uint8)
+    num_steps_y = np.floor(im.shape[1]/size).astype(np.uint8)
+    output = np.zeros_like(im).astype(np.float16)
+    for x in range(num_steps_x):
+        x_start = x*size
+        x_step = x_start+size
+        
+        for y in range(num_steps_y):
+            y_start = y*size
+            y_step = y_start+size
+            if y_step>im.shape[1]:
+                y_stop = True
+            if x_step>im.shape[0]:
+                x_stop = True
+            if x_stop == True:
+                x_step = im.shape[0]
+            if y_stop == True:
+                y_step = im.shape[1]
+            im_tile = im[x_start:x_step,y_start:y_step]
+            mean_val = np.mean(im_tile)
+            output[x_start:x_step,y_start:y_step] = im_tile-mean_val
+    output[output<0]=0
+    output = np.round(output).astype(np.uint8)
+    return output
+
+def show_im(im):
+    plt.figure()
+    plt.imshow(im, cmap = 'gray')
+
+
+
 #########################################################
 # brain specific functions
-
-def brain_seg(im, hole_size = 50, ditzle_size = 500, sato_thresh = 60):
-    im = contrast_stretch(im)
-    im = preprocess_seg(im)
+ 
+def brain_seg(im, filter = 'meijering', sigmas = range(1,8,1), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True):
+    if preprocess == True:
+        im = preprocess_seg(im)
     
-    sato_im = sato(im, sigmas = range(1,10,2), mode = 'reflect', black_ridges = False)
-    sato_norm = np.round(sato_im/np.max(sato_im)*255).astype(np.uint8)
+    if filter == 'meijering':
+        enhanced_im = meijering(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'sato':
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'frangi':
+        enhanced_im = frangi(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'jerman':
+        enhanced_im = jerman(im, sigmas = sigmas, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+    norm = np.round(enhanced_im/np.max(enhanced_im)*255).astype(np.uint8)
     
-    sato_label = np.zeros_like(sato_norm)
-    sato_label[sato_norm>sato_thresh] =1
+    enhanced_label = np.zeros_like(norm)
+    enhanced_label[norm>thresh] =1
     
     
     kernel = np.ones((6,6),np.uint8)
-    label = cv2.morphologyEx(sato_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    label = cv2.morphologyEx(enhanced_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
     
     _, label = fill_holes(label.astype(np.uint8),hole_size)
     label = remove_small_objects(label,ditzle_size)
@@ -399,23 +687,94 @@ def crop_brain_im(im,label = None):
         new_label = label[300:750,50:500]
         return new_im, new_label
 
+def jerman(im, sigmas = range(1,10,2), tau = 0.75, brightondark = True, cval=0, mode = 'reflect'):
+    if brightondark == False:
+        im = invert(im)
+    vesselness = np.zeros_like(im)
+    for i,sigma in enumerate(sigmas):
+        lambda1, lambda2 = compute_hessian_eigenvalues(im, sigma, sorting='abs', mode=mode, cval=cval)
+        if brightondark == True:
+            lambda2 = -lambda2
+        lambda3 = lambda2
+        
+        lambda_rho = lambda3
+        lambda_rho = np.where((lambda3 >0) & (lambda3<= tau*np.max(lambda3)), tau*np.max(lambda3), lambda_rho)
+        
+        lambda_rho[lambda3<0]=0
+        
+        response = np.zeros_like(lambda1)
+        response = lambda2*lambda2*(lambda_rho-lambda2)*27/np.power(lambda2+lambda_rho,3)
+        
+        response = np.where((lambda2>=lambda_rho/2) & (lambda_rho>0),1,response)
+        response = np.where((lambda2<=0) | (lambda_rho<=0),0,response)
+        
+        if i == 0:
+            vesselness = response
+        else:
+            vesselness = np.maximum(vesselness, response)
+    vesselness = vesselness/np.max(vesselness)
+    vesselness[vesselness<0.001]=0
+    return vesselness
 
+
+def seg_no_thresh(im, filter = 'meijering', sigmas = range(1,8,1), preprocess = True):
+    if preprocess == True:
+        im = preprocess_seg(im)
+    
+    if filter == 'meijering':
+        enhanced_im = meijering(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'sato':
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'frangi':
+        enhanced_im = frangi(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'jerman':
+        enhanced_im = jerman(im, sigmas = sigmas, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+    norm = np.round(enhanced_im/np.max(enhanced_im)*255).astype(np.uint8)
+
+    
+    return norm
+
+def invert_im(im):
+    output = np.zeros_like(im)
+    im = vm.normalize_contrast(im)
+    output = 255-im
+    return output
+
+
+def subtract_local_mean_sm(im,size = 8, bright_bg = True):
+    if bright_bg == True:
+        im_pad = np.pad(im, (size, size), 'maximum')
+    
+    else:
+        im_pad = np.pad(im, (size,size), 'minimum')
+    
+    step = np.floor(size/2).astype(np.uint8)
+    output = np.zeros_like(im_pad).astype(np.float16)
+    for x in range(size,im_pad.shape[0]-size):
+        for y in range(size,im_pad.shape[1]-size):
+            region_mean = np.mean(im_pad[x-step:x+step, y-step:y+step]).astype(np.uint8)
+            output[x,y] = im_pad[x,y]-region_mean
+    output[output<0]=0
+    output = np.round(output).astype(np.uint8)
+    output_no_pad = output[size:im_pad.shape[0]-size, size:im_pad.shape[1]-size]
+    return output_no_pad
 
 #####################################################################
 # Diameter
 
-def whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50): 
+def whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50):
     unique_edges = np.unique(edge_labels)
     unique_edges = np.delete(unique_edges,0)
     
     edge_label_pad = np.pad(edge_labels,pad_size)
     seg_pad = np.pad(seg, pad_size)
+    im_pad = np.pad(im,pad_size)
     full_viz = np.zeros_like(seg_pad)
     diameters = []
     for i in unique_edges:
         seg_length = len(np.argwhere(edge_label_pad == i))
         if seg_length>minimum_length:
-            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad, im)
+            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad, im_pad)
             diameters.append(temp_diam)
             full_viz = full_viz + temp_viz
     im_shape = edge_label_pad.shape
@@ -423,7 +782,12 @@ def whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size =
     
     return full_viz_no_pad, diameters
 
-def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False):
+def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False, pad = True):
+    if pad == True:
+        pad_size = 25
+        edge_labels = np.pad(edge_labels,pad_size)
+        seg = np.pad(seg, pad_size)
+        im = np.pad(im,pad_size)
     segment = np.zeros_like(edge_labels)
     segment[edge_labels==segment_number] = 1
     segment_median = segment_midpoint(segment)
@@ -465,11 +829,13 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = 
     else:
         mean_diameter = 0
     
+    if pad == True:
+        im_shape = edge_labels.shape
+        viz = viz[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
     return diameter, mean_diameter, viz
 
 def segment_midpoint(segment):
-    segment_endpoints = find_endpoints(segment)
-    endpoint_index = np.where(segment_endpoints)
+    endpoint_index, segment_endpoints = find_endpoints(segment)
     first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
     segment_indexes = np.argwhere(segment==1)
         
@@ -523,10 +889,10 @@ def plot_crossline(im, cross_index, bright = False):
         val = 250
     else:
         val = 5
-    
+    out = np.zeros_like(im)
     for i in cross_index:
-        im[i[0], i[1]] = val
-    return im
+        out[i[0], i[1]] = val
+    return out
 
 def find_crossline_length(vx,vy,point,im):
     distance = 5
@@ -596,3 +962,25 @@ def fwhm_diameter(cross_vals):
 
 #####################################################################
 # DEPRECATED
+
+def segment_vessels(image,k = 12, hole_size = 500, ditzle_size = 750, bin_thresh = 2):
+    image = cv2.medianBlur(image.astype(np.uint8),7)
+    image, background = subtract_background_rolling_ball(image, 400, light_background=False,
+                                         use_paraboloid=False, do_presmooth=True)
+    im_vector = image.reshape((-1,)).astype(np.float32)
+    
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+    _, label, center = cv2.kmeans(im_vector,k,None, criteria, 10, cv2.KMEANS_PP_CENTERS)
+    center = center.astype(np.uint8)
+    label_im = label.reshape((image.shape))
+    seg_im = np.zeros_like(label_im)
+    for i in np.unique(label_im):
+        seg_im = np.where(label_im == i, center[i],seg_im)
+    
+    _, seg_im = cv2.threshold(seg_im.astype(np.uint16), bin_thresh, 255, cv2.THRESH_BINARY)
+    
+    _, seg_im = fill_holes(seg_im.astype(np.uint8),hole_size)
+    seg_im = remove_small_objects(seg_im,ditzle_size)
+    
+    return seg_im
+

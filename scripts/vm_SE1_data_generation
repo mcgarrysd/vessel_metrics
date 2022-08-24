@@ -18,7 +18,7 @@ from skimage.filters import meijering, hessian, frangi, sato
 from skimage.morphology import skeletonize
 
 
-data_path = '/home/sean/Documents/Data/Wnt_Treatment/Nov2/' 
+data_path = '/home/sean/Documents/Data/Wnt_Treatment/Oct6/' 
 output_path = '/home/sean/Documents/vm_manuscript/SE1_IWR_treatment/'
 
 data_files = os.listdir(data_path)
@@ -32,12 +32,12 @@ for file in data_files:
     this_slice = reslice[0]
     reslice_list.append(this_slice)
         
-save_projections = False
+save_projections = True
 if save_projections:
     for file, im in zip(data_files, reslice_list):
         treatment = file.split(' ')[-1]
         treatment = treatment.split('.')[0]
-        im_name = 'Nov2_' + treatment + '.png'
+        im_name = 'Oct6_' + treatment + '.png'
         cv2.imwrite(output_path +im_name, im)
         
         
