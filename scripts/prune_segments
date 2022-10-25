@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar  3 11:13:09 2022
+
+prune segments
+
+@author: sean
+"""
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import vessel_metrics as vm
+import glob, os
+from cv2_rolling_ball import subtract_background_rolling_ball
+from skimage.filters import meijering, hessian, frangi, sato
+from skimage.morphology import skeletonize
+from scipy.stats import ttest_ind
+
+data_path = '/home/sean/Documents/vm_manuscript/SE1_IWR_treatment/data/'
+
+label_list = []
+im_list = []
+data_files = os.listdir(data_path)
+
+class_list = []
+for file in data_files:
+    if 'DMSO' in file:
+        class_list.append('DMSO')
+    else:
+        class_list.append('IWR')
+    label_list.append(cv2.imread(data_path+file+'/label.png',0))
+    im_list.append(cv2.imread(data_path+file+'/img.png',0))
+    
+im = im_list[0]
+label = label_list[0]
+seg = vm.brain_seg(im, sato_thresh = 40)
+skel = skeletonize(seg)
+edges, bp = vm.connect_segments(skel)
+
+_, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+vm.overlay_segmentation(im, edge_labels)
+
+remove_segs = [185, 281, 166, 165]
+
+terminal_segs = vm.find_terminal_segments(skel, edge_labels)
+
+new_edges, new_bp, new_skel = prune_terminal_segments(skel)
+
+def prune_terminal_segments(skel, seg_thresh = 20):
+    edges, bp = vm.connect_segments(skel)
+    _, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    _, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
+    
+    terminal_segs = vm.find_terminal_segments(skel, edge_labels)
+    new_terminal_segs = np.zeros_like(terminal_segs)
+    _, term_labels = cv2.connectedComponents(terminal_segs.astype(np.uint8))
+    unique_labels = np.unique(term_labels)[1:] # omit 0
+    removed_count = 0
+    null_points = np.zeros_like(terminal_segs)
+    for u in unique_labels:
+        temp_seg = np.zeros_like(terminal_segs)
+        temp_seg[term_labels == u] = 1
+        seg_inds = np.argwhere(term_labels == u)
+        seg_length = np.shape(seg_inds)[0]
+        if seg_length<seg_thresh:
+            endpoints = vm.find_endpoints(temp_seg)
+            endpoint_inds = np.argwhere(endpoints)
+            for i in endpoint_inds:
+                endpoint_neighborhood = bp_labels[i[0]-1:i[0]+2, i[1]-1:i[1]+2]
+                if np.any(endpoint_neighborhood>0):
+                    neighborhood = np.zeros_like(terminal_segs)
+                    neighborhood[i[0]-1:i[0]+2, i[1]-1:i[1]+2] = 1
+                    null_inds = np.argwhere((neighborhood == 1) & (bp_labels>0))[0]
+                    null_points[null_inds[0],null_inds[1]] = 1
+            null_points[term_labels==u] = 1
+            removed_count+=1
+            print(str(u) + ' removed due to length')
+    new_skel = skel-null_points
+    new_skel[new_skel<0] = 0
+    new_skel[new_skel>0] = 1
+    edges, bp = vm.connect_segments(new_skel)
+    return edges, bp, new_skel

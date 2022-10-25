@@ -131,3 +131,25 @@ vm.scatter_boxplot(df, group = 'time', column = 'bpd', alpha = 0.5)
 
 _,p_val_length = ttest_ind(df['length'][inds3[0]],df['length'][inds5[0]])
 vm.scatter_boxplot(df, group = 'time', column = 'length', alpha = 0.5)
+
+
+seg_count_mean_3 = np.mean(df['seg_count'][inds3[0]])
+seg_count_mean_5 = np.mean(df['seg_count'][inds5[0]])
+
+nl_mean_3= np.mean(df['net_length'][inds3[0]])
+nl_mean_5 = np.mean(df['net_length'][inds5[0]])
+
+bpd_mean_3 = np.mean(df['bpd'][inds3[0]])
+bpd_mean_5 = np.mean(df['bpd'][inds5[0]])
+
+vd_mean_3 = np.mean(df['vd'][inds3[0]])
+vd_mean_5 = np.mean(df['vd'][inds5[0]])
+
+length_mean_3 = np.mean(df['length'][inds3[0]])
+length_mean_5 = np.mean(df['length'][inds5[0]])
+
+print(bpd_mean_3, bpd_mean_5, p_val_bpd)
+print(seg_count_mean_3, seg_count_mean_5, p_val_seg_count)
+print(nl_mean_3, nl_mean_5, p_val_net_length)
+print(vd_mean_3, vd_mean_5, p_val_vd)
+print(length_mean_3, length_mean_5, p_val_length)

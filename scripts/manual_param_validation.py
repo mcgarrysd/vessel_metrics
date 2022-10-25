@@ -21,7 +21,6 @@ from scipy.stats import ttest_ind
 data_path = '/media/sean/SP PHD U3/from_home/vm_manuscript/SE4_manual_params/'
 data_files = os.listdir(data_path)
 
-<<<<<<< HEAD
 segments_label = []
 segments_seg = []
 
@@ -33,7 +32,7 @@ bp_seg = []
 for file in data_files:
     print(file)
     im = cv2.imread(data_path+file+'/img_preproc.png',0)
-    seg = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = False)
+    seg = vm.brain_seg(im, filter = 'meijering', thresh = 40, preprocess = True)
     
     skel_raw = skeletonize(seg)
     edges_raw, bp_raw = vm.find_branchpoints(skel_raw)
@@ -42,18 +41,10 @@ for file in data_files:
     edges_unfixed.append(edge_count_raw)
     bp_unfixed.append(bp_count_raw)
             
-=======
-num_segments = []
-num_bp = []
-for file in data_files:
-    im = cv2.imread(data_path+file,0)
-    seg = vm.brain_seg(im)
->>>>>>> 9a8933a076a67117d0bd563dba9676e61afd66fa
     skel, edges, bp = vm.skeletonize_vm(seg)
     seg_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
     bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
     
-<<<<<<< HEAD
     segments_seg.append(seg_count)
     bp_seg.append(bp_count)
     
@@ -68,6 +59,12 @@ for file in data_files:
 
 manual_seg = [40,35,29,29]
 manual_bp = [25,23,22,18]
+
+hand_drawn_seg = [50,41,33,41]
+hand_drawn_bp = [26,21,13,19]
+
+pd_hd_seg = np.mean(percent_dif(manual_seg, hand_drawn_seg))
+pd_hd_bp = np.mean(percent_dif(manual_bp, hand_drawn_bp))
 
 pd_ec_unf = percent_dif(manual_seg, edges_unfixed)
 pd_bp_unf = percent_dif(manual_bp, bp_unfixed)
@@ -88,8 +85,3 @@ def percent_dif(ground_truth, label):
         perc_dif.append(dif/i)
     perc_dif = [abs(i) for i in perc_dif]
     return perc_dif
-=======
-    num_segments.append(seg_count)
-    num_bp.append(bp_count)
-    
->>>>>>> 9a8933a076a67117d0bd563dba9676e61afd66fa

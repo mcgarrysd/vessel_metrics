@@ -121,8 +121,24 @@ _,p_val_bpd = ttest_ind(df['branchpoint density'][inds_c[0]],df['branchpoint den
 
 _,p_val_length = ttest_ind(df['mean length'][inds_c[0]],df['mean length'][inds_d[0]])
 
+seg_count_mean_vegf = np.mean(df['segment count'][inds_c[0]])
+seg_count_mean_dmso = np.mean(df['segment count'][inds_d[0]])
+
+nl_mean_vegf = np.mean(df['network length'][inds_c[0]])
+nl_mean_dmso = np.mean(df['network length'][inds_d[0]])
+
+bpd_mean_vegf = np.mean(df['branchpoint density'][inds_c[0]])
+bpd_mean_dmso = np.mean(df['branchpoint density'][inds_d[0]])
+
+vd_mean_vegf = np.mean(df['vessel_density'][inds_c[0]])
+vd_mean_dmso = np.mean(df['vessel_density'][inds_d[0]])
+
+length_mean_vegf = np.mean(df['mean length'][inds_c[0]])
+length_mean_dmso = np.mean(df['mean length'][inds_d[0]])
 
 file = data_list[3]
+
+
 
 scatter_boxplot(df, 'condition', 'network length', 0.5)
 

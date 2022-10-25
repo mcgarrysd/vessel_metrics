@@ -12,19 +12,20 @@ of blood vessel image
 import cv2
 import numpy as np
 from skimage.morphology import skeletonize
-from scipy.spatial import distance
-from skimage import draw
+from scipy.spatial import distance # Diameter measurement
 import matplotlib.pyplot as plt
 import os
-from czifile import CziFile
-from cv2_rolling_ball import subtract_background_rolling_ball
 from skimage.filters import meijering, hessian, frangi, sato
-from skimage.draw import line
-from bresenham import bresenham
+from skimage.draw import line # just in tortuosity
+from bresenham import bresenham # diameter 
 from skimage.util import invert
 from skimage.filters.ridges import compute_hessian_eigenvalues
-import itertools
+import itertools # fixing skeleton
 from math import dist
+from aicsimageio import AICSImage
+from skimage import data, restoration, util # deprecated preproc
+import timeit
+from skimage.morphology import white_tophat, black_tophat, disk
 
 def fill_holes(label_binary, hole_size):
     label_inv = np.bitwise_not(label_binary)
@@ -54,12 +55,8 @@ def tortuosity(edge_labels, end_points):
         this_segment[edge_labels == u] = 1
         
         end_inds = np.argwhere(endpoint_labeled == u)
-#        try:
-            # draw a line between the end points, count the pixels
         end_point_line = draw.line(end_inds[0,0],end_inds[0,1],end_inds[1,0],end_inds[1,1])
         endpoint_distance = np.max(np.shape(end_point_line))
-#        except:
-#            print(u)
         segment_length = np.sum(this_segment)
         tortuosity.append(endpoint_distance/segment_length)
     return tortuosity, unique_labels
@@ -154,14 +151,27 @@ def show_im(im):
     plt.figure()
     plt.imshow(im, cmap = 'gray')
 
-def preprocess_czi(input_directory,file_name, channel = 0):
-    with CziFile(input_directory + file_name) as czi:
-        image_arrays = czi.asarray()
+# Deprecated version of the function using czifile library
+#def preprocess_czi(input_directory,file_name, channel = 0):
+#    with CziFile(input_directory + file_name) as czi:
+#        image_arrays = czi.asarray()
+#
+#    image = np.squeeze(image_arrays)
+#    im_channel = image[channel,:,:,:]
+#    im_channel = normalize_contrast(im_channel)
+#    return im_channel
 
-    image = np.squeeze(image_arrays)
+def preprocess_czi(input_directory,file_name, channel = 0):
+    img = AICSImage(input_directory+file_name)
+    dims = img.physical_pixel_sizes
+    zdim = dims[0]
+    ydim = dims[1]
+    xdim = dims[2]
+    out_dims = [zdim, ydim, xdim]
+    image = np.squeeze(img.data)
     im_channel = image[channel,:,:,:]
     im_channel = normalize_contrast(im_channel)
-    return im_channel
+    return im_channel, out_dims
     
 def czi_projection(volume,axis):
     projection = np.max(volume, axis = axis)
@@ -192,9 +202,40 @@ def remove_small_objects(label, size_thresh):
         
     return output
 
-def preprocess_seg(image,ball_size = 400, median_size = 7, upper_lim = 255, lower_lim = 0):
-    image, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
-                                                            use_paraboloid=False, do_presmooth=True)
+def preprocess_seg(image,radius = 50, median_size = 7, upper_lim = 255, lower_lim = 0, bright_background = False):
+    image = normalize_contrast(image)
+
+    image = subtract_background(image, radius = radius, light_bg = bright_background)
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
+    return image
+
+def subtract_background(image, radius=50, light_bg=False):
+    str_el = disk(radius) 
+    if light_bg:
+        output =  black_tophat(image, str_el)
+    else:
+        output = white_tophat(image, str_el)
+    return output
+
+def timer_output(t0):
+    t1 = timeit.default_timer()
+    elapsed_time = round(t1-t0,3)
+    
+    print(f"Elapsed time: {elapsed_time}")
+
+def preprocess_seg_deprecated(image,ball_size = 0, median_size = 7, upper_lim = 255, lower_lim = 0, bright_background = False):
+    image = normalize_contrast(image)
+    if ball_size == 0:
+        ball_size = np.round(image.shape[0]/3)
+    
+    if bright_background == False:
+        bg = restoration.rolling_ball(image, radius = ball_size)
+        image = image-bg
+    else:
+        image_inverted = util.invert(image)
+        bg_inv = restoration.rolling_ball(image, radius = ball_size)
+        image = util.invert(image_inverted-bg_inv)
     image = cv2.medianBlur(image.astype(np.uint8),median_size)
     image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
     return image
@@ -485,30 +526,32 @@ def prune_terminal_segments(skel, seg_thresh = 20):
                     null_points[null_inds[0],null_inds[1]] = 1
             null_points[term_labels==u] = 1
             removed_count+=1
-            print(str(u) + ' removed due to length')
+            #print(str(u) + ' removed due to length')
     new_skel = skel-null_points
     new_skel[new_skel<0] = 0
     new_skel[new_skel>0] = 1
     edges, bp = connect_segments(new_skel)
     return edges, bp, new_skel
 
+
 def fix_skel_artefacts(skel):
     edges, bp = find_branchpoints(skel)
     edge_count, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
     bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
     new_edge_num = edge_count+1
-    for i in range(1,bp_count):
+    for i in np.unique(bp_labels[1:]):
         connected_segs = find_connected_segments(bp_labels, edge_labels, i)
-        print('bp ' + str(i) + '/'+str(bp_count))
         if len(connected_segs)==2:
-            print(str(i)+ ' has 2 connections')
             coord_list = []
             bp_conns = np.zeros_like(edges)
             for c in connected_segs:
                 bp_conns[edge_labels == c] = c
                 temp_seg = np.zeros_like(edges)
                 temp_seg[edge_labels == c] = 1
-                coords, endpoints = find_endpoints(temp_seg)
+                if np.sum(temp_seg == 1):
+                    coords = np.argwhere(temp_seg == 1)
+                else:
+                    coords, endpoints = find_endpoints(temp_seg)
                 coord_list.append(coords)
             lowest_dist = 500
             for x in coord_list[0]:
@@ -616,34 +659,6 @@ def scatter_boxplot(df, group, column, alpha = 0.4):
     for x, val, clevel in zip(xs, vals, clevels):
         plt.scatter(x, val, c = plt.cm.prism(clevel), alpha = 0.4)
 
-def subtract_local_mean(im,size = 8):
-    y_stop = False
-    x_stop = False
-    num_steps_x = np.floor(im.shape[0]/size).astype(np.uint8)
-    num_steps_y = np.floor(im.shape[1]/size).astype(np.uint8)
-    output = np.zeros_like(im).astype(np.float16)
-    for x in range(num_steps_x):
-        x_start = x*size
-        x_step = x_start+size
-        
-        for y in range(num_steps_y):
-            y_start = y*size
-            y_step = y_start+size
-            if y_step>im.shape[1]:
-                y_stop = True
-            if x_step>im.shape[0]:
-                x_stop = True
-            if x_stop == True:
-                x_step = im.shape[0]
-            if y_stop == True:
-                y_step = im.shape[1]
-            im_tile = im[x_start:x_step,y_start:y_step]
-            mean_val = np.mean(im_tile)
-            output[x_start:x_step,y_start:y_step] = im_tile-mean_val
-    output[output<0]=0
-    output = np.round(output).astype(np.uint8)
-    return output
-
 def show_im(im):
     plt.figure()
     plt.imshow(im, cmap = 'gray')
@@ -741,7 +756,7 @@ def invert_im(im):
     return output
 
 
-def subtract_local_mean_sm(im,size = 8, bright_bg = True):
+def subtract_local_mean(im,size = 8, bright_bg = True):
     if bright_bg == True:
         im_pad = np.pad(im, (size, size), 'maximum')
     
@@ -758,6 +773,38 @@ def subtract_local_mean_sm(im,size = 8, bright_bg = True):
     output = np.round(output).astype(np.uint8)
     output_no_pad = output[size:im_pad.shape[0]-size, size:im_pad.shape[1]-size]
     return output_no_pad
+
+
+def multi_scale_seg(im, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = range(10,20,5), hole_size = 50, ditzle_size = 500, thresh = 40, preprocess = True):
+    if preprocess == True:
+        im = preprocess_seg(im)
+    
+    if filter == 'meijering':
+        enh_sig1 = meijering(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = meijering(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
+    elif filter == 'sato':
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'frangi':
+        enh_sig1 = frangi(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = frangi(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
+    elif filter == 'jerman':
+        enh_sig1 = jerman(im, sigmas = sigma1, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+        enh_sig2 = jerman(im, sigmas = sigma1, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+    sig1_norm = normalize_contrast(enh_sig1)
+    sig2_norm = normalize_contrast(enh_sig2)
+    
+    norm = sig1_norm.astype(np.uint16)+sig2_norm.astype(np.uint16)
+    enhanced_label = np.zeros_like(norm)
+    enhanced_label[norm>thresh] =1
+    
+    
+    kernel = np.ones((6,6),np.uint8)
+    label = cv2.morphologyEx(enhanced_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    
+    _, label = fill_holes(label.astype(np.uint8),hole_size)
+    label = remove_small_objects(label,ditzle_size)
+    
+    return label
 
 #####################################################################
 # Diameter
