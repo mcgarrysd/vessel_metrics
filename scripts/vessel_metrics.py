@@ -27,6 +27,84 @@ from skimage import data, restoration, util # deprecated preproc
 import timeit
 from skimage.morphology import white_tophat, black_tophat, disk
 
+####################################################################
+# functions likely to be useful implementing vessel metrics independently on your own data
+
+def segment_image(im, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = range(10,20,5), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True, multi_scale = False):
+    if preprocess == True:
+        im = preprocess_seg(im)
+    if filter == 'meijering':
+        enh_sig1 = meijering(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = meijering(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
+    elif filter == 'sato':
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+    elif filter == 'frangi':
+        enh_sig1 = frangi(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = frangi(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
+    elif filter == 'jerman':
+        enh_sig1 = jerman(im, sigmas = sigma1, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+        enh_sig2 = jerman(im, sigmas = sigma1, tau = 0.75, brightondark = True, cval=0, mode = 'reflect')
+        
+    sig1_norm = normalize_contrast(enh_sig1)
+    
+    if multi_scale == True:
+        sig2_norm = normalize_contrast(enh_sig2)
+    else:
+        sig2_norm = np.zeros_like(enh_sig2)
+    
+    norm = sig1_norm.astype(np.uint16)+sig2_norm.astype(np.uint16)
+    enhanced_label = np.zeros_like(norm)
+    enhanced_label[norm>thresh] =1
+    
+    
+    kernel = np.ones((6,6),np.uint8)
+    label = cv2.morphologyEx(enhanced_label.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    
+    _, label = fill_holes(label.astype(np.uint8),hole_size)
+    label = remove_small_objects(label,ditzle_size)
+    
+    return label
+
+def skeletonize_vm(label):
+    skel = skeletonize(label)
+    _,_, skel = prune_terminal_segments(skel)
+    edges, bp = fix_skel_artefacts(skel)
+    new_skel = edges+bp
+    return new_skel, edges, bp
+
+def preprocess_seg(image,radius = 50, median_size = 7, upper_lim = 255, lower_lim = 0, bright_background = False):
+    image = normalize_contrast(image)
+
+    image = subtract_background(image, radius = radius, light_bg = bright_background)
+    image = cv2.medianBlur(image.astype(np.uint8),median_size)
+    image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
+    return image
+
+def show_im(im):
+    plt.figure()
+    plt.imshow(im, cmap = 'gray')
+    
+def overlay_segmentation(im,label, alpha = 0.5, contrast_adjust = False, im_cmap = 'gray', label_cmap = 'jet'):
+    if contrast_adjust:
+        im = contrast_stretch(im)
+        im = preprocess_seg(im)
+    masked = np.ma.masked_where(label == 0, label)
+    plt.figure()
+    plt.imshow(im, 'gray', interpolation = 'none')
+    plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
+    plt.show()
+    
+def generate_roi(im):
+    roi = cv2.selectROI(im.astype(np.uint8))
+    cv2.destroyWindow('select')
+    return roi
+
+def crop_roi(im, roi):
+    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
+    return im_out
+
+####################################################################
+
 def fill_holes(label_binary, hole_size):
     label_inv = np.bitwise_not(label_binary)
     label_inv[label_inv<255] = 0
@@ -44,8 +122,10 @@ def fill_holes(label_binary, hole_size):
     skel = skeletonize(label_mask)
     return skel, label_mask
 
-
-def tortuosity(edge_labels, end_points):
+def tortuosity(edge_labels):
+    edges = np.zeros_like(edge_labels)
+    edges[edge_labels>0]=1
+    coords, end_points = find_endpoints(edges)
     endpoint_labeled = edge_labels*end_points
     unique_labels = np.unique(edge_labels)
     unique_labels = unique_labels[1:]
@@ -55,7 +135,7 @@ def tortuosity(edge_labels, end_points):
         this_segment[edge_labels == u] = 1
         
         end_inds = np.argwhere(endpoint_labeled == u)
-        end_point_line = draw.line(end_inds[0,0],end_inds[0,1],end_inds[1,0],end_inds[1,1])
+        end_point_line = line(end_inds[0,0],end_inds[0,1],end_inds[1,0],end_inds[1,1])
         endpoint_distance = np.max(np.shape(end_point_line))
         segment_length = np.sum(this_segment)
         tortuosity.append(endpoint_distance/segment_length)
@@ -147,10 +227,6 @@ def find_terminal_segments(skel, edge_labels):
             terminal_segments[edge_labels == u] = 1
     return terminal_segments
 
-def show_im(im):
-    plt.figure()
-    plt.imshow(im, cmap = 'gray')
-
 # Deprecated version of the function using czifile library
 #def preprocess_czi(input_directory,file_name, channel = 0):
 #    with CziFile(input_directory + file_name) as czi:
@@ -201,14 +277,6 @@ def remove_small_objects(label, size_thresh):
     output[labels>0] = 1
         
     return output
-
-def preprocess_seg(image,radius = 50, median_size = 7, upper_lim = 255, lower_lim = 0, bright_background = False):
-    image = normalize_contrast(image)
-
-    image = subtract_background(image, radius = radius, light_bg = bright_background)
-    image = cv2.medianBlur(image.astype(np.uint8),median_size)
-    image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
-    return image
 
 def subtract_background(image, radius=50, light_bg=False):
     str_el = disk(radius) 
@@ -339,7 +407,6 @@ def contrast_stretch(image,upper_lim = 255, lower_lim = 0):
     
     return stretch
 
-
 def branchpoint_density(skel, label):
     _, bp = find_branchpoints(skel)
     _, bp_labels = cv2.connectedComponents(bp, connectivity = 8)
@@ -356,17 +423,6 @@ def branchpoint_density(skel, label):
     bp_density = np.array(bp_density)
     bp_density[bp_density<0] = 0
     return bp_density
-
-
-def overlay_segmentation(im,label, alpha = 0.5, contrast_adjust = False, im_cmap = 'gray', label_cmap = 'jet'):
-    if contrast_adjust:
-        im = contrast_stretch(im)
-        im = preprocess_seg(im)
-    masked = np.ma.masked_where(label == 0, label)
-    plt.figure()
-    plt.imshow(im, 'gray', interpolation = 'none')
-    plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
-    plt.show()
     
 def vessel_density(im,label, num_tiles_x, num_tiles_y):
     density = np.zeros_like(im).astype(np.float16)
@@ -583,7 +639,6 @@ def fix_skel_artefacts(skel):
         seg_inds = np.argwhere(temp_seg==1)
         seg_length = np.shape(seg_inds)[0]
         if (bp_num <2) and (seg_length<10):
-            print('removing seg ' + str(i) + ' of length ' + str(seg_length))
             for x,y in seg_inds:
                 edge_labels[x,y] = 0
     
@@ -591,13 +646,6 @@ def fix_skel_artefacts(skel):
     new_skel[new_skel>0] = 1
     new_edges, new_bp = find_branchpoints(new_skel)
     return new_edges, new_bp
-    
-def skeletonize_vm(label):
-    skel = skeletonize(label)
-    _,_, skel = prune_terminal_segments(skel)
-    edges, bp = fix_skel_artefacts(skel)
-    new_skel = edges+bp
-    return new_skel, edges, bp
 
 def branchpoints_per_seg(skel, edge_labels, bp, seg_num):
     bp_count, bp_labels = cv2.connectedComponents(bp.astype(np.uint8))
@@ -634,15 +682,6 @@ def find_connected_segments(bp_labels, edge_labels, bp_num):
     connected_segs = flatten(connected_segs)
     return connected_segs
 
-def generate_roi(im):
-    roi = cv2.selectROI(im.astype(np.uint8))
-    cv2.destroyWindow('select')
-    return roi
-
-def crop_roi(im, roi):
-    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
-    return im_out
-
 def scatter_boxplot(df, group, column, alpha = 0.4):
     grouped = df.groupby(group)
     names, vals, xs = [],[],[]
@@ -658,11 +697,6 @@ def scatter_boxplot(df, group, column, alpha = 0.4):
 
     for x, val, clevel in zip(xs, vals, clevels):
         plt.scatter(x, val, c = plt.cm.prism(clevel), alpha = 0.4)
-
-def show_im(im):
-    plt.figure()
-    plt.imshow(im, cmap = 'gray')
-
 
 
 #########################################################
@@ -730,7 +764,6 @@ def jerman(im, sigmas = range(1,10,2), tau = 0.75, brightondark = True, cval=0, 
     vesselness = vesselness/np.max(vesselness)
     vesselness[vesselness<0.001]=0
     return vesselness
-
 
 def seg_no_thresh(im, filter = 'meijering', sigmas = range(1,8,1), preprocess = True):
     if preprocess == True:
@@ -818,16 +851,18 @@ def whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size =
     im_pad = np.pad(im,pad_size)
     full_viz = np.zeros_like(seg_pad)
     diameters = []
+    included_segments = []
     for i in unique_edges:
         seg_length = len(np.argwhere(edge_label_pad == i))
         if seg_length>minimum_length:
-            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad, im_pad)
+            included_segments.append(i)
+            _, temp_diam, temp_viz = visualize_vessel_diameter(edge_label_pad, i, seg_pad, im_pad, pad = False)
             diameters.append(temp_diam)
             full_viz = full_viz + temp_viz
     im_shape = edge_label_pad.shape
     full_viz_no_pad = full_viz[pad_size:im_shape[0]-pad_size,pad_size:im_shape[1]-pad_size]
-    
-    return full_viz_no_pad, diameters
+    output_diameters = list(zip(included_segments, diameters))
+    return full_viz_no_pad, output_diameters
 
 def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = False, pad = True):
     if pad == True:
@@ -883,13 +918,23 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = 
 
 def segment_midpoint(segment):
     endpoint_index, segment_endpoints = find_endpoints(segment)
-    first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
-    segment_indexes = np.argwhere(segment==1)
+    segment_indexes = np.argwhere(segment)
+    if len(endpoint_index) == 0:
+        # vessel has no endpoints, may be a circular segment
+        segment_inds = np.argwhere(segment)
+        center_of_mass = [np.average(segment_indexes[:,0]), np.average(segment_inds[:,1])]
+        distances = []
+        for i in range(len(segment_indexes)):
+            this_pt = segment_indexes[i][0], segment_indexes[i][1]
+            distances.append(distance.chebyshev(center_of_mass, this_pt))
+    else:
+        first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
         
-    distances = []
-    for i in range(len(segment_indexes)):
-        this_pt = segment_indexes[i][0], segment_indexes[i][1]
-        distances.append(distance.chebyshev(first_endpoint, this_pt))
+            
+        distances = []
+        for i in range(len(segment_indexes)):
+            this_pt = segment_indexes[i][0], segment_indexes[i][1]
+            distances.append(distance.chebyshev(first_endpoint, this_pt))
     sort_indexes = np.argsort(distances)
     sorted_distances = sorted(distances)
     median_val = np.median(sorted_distances)

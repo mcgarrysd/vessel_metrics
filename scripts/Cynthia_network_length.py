@@ -26,33 +26,36 @@ file_list = os.listdir(data_path+'Raw/')
 t0 = timeit.default_timer()
 net_length = []
 net_length_um = []
-prefix_list = []
-mkdir = False
+im_name_list = []
+mkdir = True
 for file in file_list:
     fname = file.split('.')
     fname = fname[0].split(' ')
     und = '_'
     prefix = fname[0]+und+fname[1]+und+fname[-2]+und+fname[-1]
-    prefix_list.append(prefix)
     print(file, prefix)
     
     volume, dims = vm.preprocess_czi(data_path+'Raw/',file, channel = 1)
     slice_range = len(volume)
     slice_thickness = np.round(slice_range/2).astype(np.uint8)
     reslice = vm.reslice_image(volume,slice_thickness)
-    this_slice = reslice[0]
-    seg = vm.brain_seg(this_slice, thresh = 40)
-    
-    skel, edges, bp = vm.skeletonize_vm(seg)
-    nl = vm.network_length(edges)
-    net_length.append(nl)
-    net_length_um.append(nl*dims[1])
-    overlay = edges*100+seg*50
-    
     if mkdir == True:
         os.mkdir(data_path+'Processed/'+prefix)
-    cv2.imwrite(data_path+'Processed/'+prefix+'/img.png',this_slice)
-    cv2.imwrite(data_path+'Processed/'+prefix+'/label.png', overlay)
+    for i in range(reslice.shape[0]):
+        this_slice = reslice[i]
+        seg = vm.brain_seg(this_slice, thresh = 40)
+        
+        skel, edges, bp = vm.skeletonize_vm(seg)
+        nl = vm.network_length(edges)
+        net_length.append(nl)
+        net_length_um.append(nl*dims[1])
+        overlay = edges*100+seg*50
+        
+        suffix = '_slice'+str(i)+'.png'
+        im_name_list.append(prefix+'_slice'+str(i))
+
+        cv2.imwrite(data_path+'Processed/'+prefix+'/img'+suffix,this_slice)
+        cv2.imwrite(data_path+'Processed/'+prefix+'/label'+suffix, overlay)
      
 t1 = vm.timer_output(t0)
 #file = file_list[0]
