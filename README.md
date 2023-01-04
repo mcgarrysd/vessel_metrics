@@ -82,23 +82,27 @@ vessel_raw = reslice[0]
 vessel_preproc = vm.preprocess_seg(vessel_raw)
 
 # Alternatively, this can be done manually
-image = cv2.medianBlur(vessels_raw.astype(np.uint8),median_size)
-vessel_preproc, background = subtract_background_rolling_ball(image, ball_size, light_background=False,
-                                                            use_paraboloid=False, do_presmooth=True)
-vessel_preproc = vm.contrast_stretch(vessel_preproc)
+image = normalize_contrast(image)
+
+image = subtract_background(image, radius = radius, light_bg = bright_background)
+image = cv2.medianBlur(image.astype(np.uint8),median_size)
+image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
 ```
 ### Vessel segmentation
 ``` Python
 # filter options meijering, sato, frangi, jerman
-# hole size (default 50) controls the size of small holes to be filled in post segmentation
+# hole size (default 50) controls the size of small holes to be filled in post processing
 # ditzle size (default 500) removes small objects post segmetnation
-# sigmas (default (1,10,2)) controls sigma values input to enhancement filter
+# sigma1 (default (1,10,2)) controls sigma values input to enhancement filter
+# sigma2 is only used if multi_scale = True, this setting applies 2 vessel enhancement filters and sums the images.
 # thresh (default 60) is the threshold value to binarize the final enhanced image
-vessel_seg = vm.brain_seg(vessel_raw, filter = 'frangi', thresh = 10)
+# Your sigma numbers should cover the range of vessel diameters you expect in your image. It's ideal to set the max value smaller than the biggest vessel in your image, as the filter tends to overestimate the vessel boundaries otherwise.
+vessel_seg = vm.segment_image(image, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = range(10,20,5), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True, multi_scale = True)
 
 ```
 ### Vessel architecture
 ``` Python
+# The skeletonize_vm function uses the skimage skeletonize function and then post processes the skeleton to fix common errors in skeletonizing vascular trees.
 skel, edges, bp = vm.skeletonize_vm(vessel_seg)
 _, edge_labels = cv2.connectedComponents(edges)
 ```
@@ -117,6 +121,8 @@ diam_list, mean_diam, segment_viz = vm.visualize_vessel_diameter(edge_labels, se
 ```
 ### Vessel parameter calculation
 ``` Python
+# All of the below is accomplished using the parameter_analysis function in conjuction with the user interface.
+
 # network length is the summation of all segment lengths
 net_length = vm.network_length(edges)
 
