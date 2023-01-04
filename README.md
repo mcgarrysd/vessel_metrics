@@ -3,7 +3,7 @@ Created by S.D. McGarry under the direction of S. Childs at the University of Ca
 ## Description
 Vessel metrics is a software package written in python designed to automate the analysis of vascular architecture. Default settings are optimized for confocal microscopy imaging with vessels on the order of 10 pixels in diameter, but will support other image types with manual user adjustment.
 
-This project is actively under development.
+This project is actively under development. A user guide for the user interface will be available shortly.
 
 ![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/all_diameters.png "Vessel diameters")
 
