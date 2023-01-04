@@ -5,7 +5,7 @@ Vessel metrics is a software package written in python designed to automate the 
 
 This project is actively under development. A user guide for the user interface will be available shortly.
 
-![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/all_diameters.png "Vessel diameters")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/methods_figure_v1.png "Vessel diameters")
 
 
 ## Features
@@ -28,12 +28,13 @@ Vessel segmentation included is optimized for confocal imaging. The default pipe
 Default skeletonization using skimage inbuilt function is built upon to handle common artefacts in vascular imaging. Small terminal segments are removed and parent segments with multiple child branches are merged to produce a more accurate representation of vessel structure.
 
 ![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/edge_labels.png "Vessel segments")
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/fix_skeleton.png "Erroneous segments removed from skeleton")
 
 ### Fully automatic vessel diameter calculation
 Using the vessel skeleton, vessel metrics identifies individual vessel segments and branch points, determines the local slope of a segment, places a cross line of appropriate length, and measures the full width half max diameter across the vessel at each crossline. User defined crossline spacing (default every 10 pixels). 
 
 ![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segment_diameter.png "Single segment diameter")
-
+![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/diam_removal.png "Erroneous idameter measurements removed")
 ### Vessel parameter calculation
 Vessel metrics calculates branchpoint density, segment length, vessel density, and network length.
 
