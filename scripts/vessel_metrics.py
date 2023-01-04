@@ -407,39 +407,6 @@ def contrast_stretch(image,upper_lim = 255, lower_lim = 0):
     
     return stretch
 
-def branchpoint_density(skel, label):
-    _, bp = find_branchpoints(skel)
-    _, bp_labels = cv2.connectedComponents(bp, connectivity = 8)
-    
-    skel_inds = np.argwhere(skel > 0)
-    
-    bp_density = []
-    for i in range(0,len(skel_inds), 50):
-        x = skel_inds[i][0]; y = skel_inds[i][1]
-        this_tile = bp_labels[x-25:x+25,y-25:y+25]
-        bp_number = len(np.unique(this_tile))-1
-        bp_density.append(bp_number)
-        
-    bp_density = np.array(bp_density)
-    bp_density[bp_density<0] = 0
-    return bp_density
-    
-def vessel_density(im,label, num_tiles_x, num_tiles_y):
-    density = np.zeros_like(im).astype(np.float16)
-    density_array = []
-    label[label>0] = 1
-    step_x = np.round(im.shape[0]/num_tiles_x).astype(np.int16)
-    step_y = np.round(im.shape[1]/num_tiles_y).astype(np.int16)
-    for x in range(0,im.shape[0], step_x):
-        for y in range(0,im.shape[1], step_y):
-            tile = label[x:x+step_x-1,y:y+step_y-1]
-            numel = tile.shape[0]*tile.shape[1]
-            tile_density = np.sum(tile)/numel
-            tile_val = np.round(tile_density*1000)
-            density[x:x+step_x-1,y:y+step_y-1] = tile_val
-            density_array.append(tile_val)
-    density = density.astype(np.uint16)
-    return density, density_array
 
 def reslice_image(image,thickness):
     num_slices = np.shape(image)[0]
@@ -1051,6 +1018,233 @@ def fwhm_diameter(cross_vals):
     except:
         diameter = 0
     return diameter
+
+##################################################################
+# User interface functions
+    
+def make_segmentation_settings(settings_list):
+    defaults = ['meijering', 40, range(1,8,1), range(10,20,5), 50, 500, True, False]
+    final_settings = []
+    for s,t in zip(settings_list, defaults):
+        if s == '':
+            final_settings.append(t)
+        else:
+            final_settings.append(s)
+    settings_dict = {'filter': final_settings[0], 'threshold': final_settings[1], 'sigma1': final_settings[2], 'sigma2': final_settings[3], 'hole size': final_settings[4], 'ditzle size': final_settings[5], 'preprocess': final_settings[6], 'multi scale': final_settings[7]}
+    
+    settings_dict['filter']=settings_dict['filter'].lower()
+    possible_filters = ['meijering', 'jerman', 'frangi', 'sato']
+    if settings_dict['filter'] not in possible_filters:
+        settings_dict['filter'] = 'meijering'
+    
+    settings_dict['threshold']=int(settings_dict['threshold'])
+    if settings_dict['threshold']<0 or settings_dict['threshold']>255:
+        settings_dict['threshold'] = 40
+    
+    settings_dict['hole size']=int(settings_dict['hole size'])
+    if settings_dict['hole size']<=0:
+        settings_dict['hole size'] = 40
+    
+    settings_dict['ditzle size']=int(settings_dict['ditzle size'])
+    if settings_dict['ditzle size']<=0: 
+        settings_dict['ditzle size'] = 500
+        
+    if type(settings_dict['sigma1']) == str:
+        res = tuple(map(int, settings_dict['sigma1'].split(' ')))
+        try:
+            new_sigma = range(res[0], res[1], res[2])
+        except:
+            print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
+            settings_dict['sigma1'] = range(1,8,1)
+    if type(settings_dict['sigma2']) == str:
+        res = tuple(map(int, settings_dict['sigma2'].split(' ')))
+        try:
+            new_sigma = range(res[0], res[1], res[2])
+        except:
+            print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
+            settings_dict['sigma2'] = range(10,20,5)
+    accepted_answers = ['yes', 'no']
+    
+    if type(settings_dict['preprocess']) == str:
+        settings_dict['multi scale']=settings_dict['multi scale'].lower()
+        if settings_dict['multi scale'] not in accepted_answers:
+            settings_dict['multi scale'] = False
+        if settings_dict['multi scale'] == 'yes':
+            settings_dict['multi scale'] = True
+        if settings_dict['multi scale'] == 'no':
+            settings_dict['multi scale'] = False
+        
+    if type(settings_dict['preprocess']) == str:
+        settings_dict['preprocess']=settings_dict['preprocess'].lower()
+        accepted_answers = ['yes', 'no']
+        if settings_dict['preprocess'] not in accepted_answers:
+            settings_dict['preprocess'] = True
+        if settings_dict['preprocess'] == 'yes':
+            settings_dict['preprocess'] = True
+        if settings_dict['preprocess'] == 'no':
+            settings_dict['preprocess'] = False
+    return settings_dict
+        
+
+def segment_with_settings(im, settings):
+    seg = segment_image(im, filter = settings['filter'], sigma1 = settings['sigma1'], sigma2 = settings['sigma2'], hole_size = settings['hole size'], ditzle_size = settings['ditzle size'], preprocess = settings['preprocess'], multi_scale = settings['multi scale'])
+    return seg
+
+def parameter_analysis(im, seg, params,output_path, file_name, slice_num = ''):
+    seg[seg>0] = 1
+    skel, edges, bp = skeletonize_vm(seg)
+    edge_count, edge_labels = cv2.connectedComponents(edges)
+    overlay = seg*150+skel*200
+    cv2.imwrite(output_path+'/'+file_name+'/vessel_centerlines'+slice_num+'.png',seg)
+    segment_count = list(range(0, edge_count))
+    if 'vessel density' in params:
+        density_image, density_array, overlay = vessel_density(im, seg, 16,16)
+        overlay_segmentation(im, density_image)
+        cv2.imwrite(output_path+'/'+file_name+'/label_'+slice_num+'.png',seg)
+        plt.savefig(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.png', bbox_inches = 'tight')
+        plt.close('all')
+        cv2.imwrite(output_path+'/'+file_name+'/vessel_density_overlay_'+slice_num+'.png', overlay)
+        out_dens = list(zip(list(range(0,255)), density_array))
+        np.savetxt(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.txt', out_dens, fmt = '%.1f')
+    if 'branchpoint density' in params:
+        bp_density, overlay = branchpoint_density(seg)
+        np.savetxt(output_path+'/'+file_name+'/network_length'+slice_num+'.txt', bp_density, fmt = '%.1f')
+    if 'network length' in params:
+        net_length = network_length(edges)
+        net_length_out = []
+        net_length_out.append(net_length)
+        np.savetxt(output_path+'/'+file_name+'/network_length'+slice_num+'.txt', net_length_out, fmt = '%.1f')
+    if 'tortuosity' in params:
+        tort_output = tortuosity(edge_labels)
+        np.savetxt(output_path+'/'+file_name+'/tortuosity_'+slice_num+'.txt', tort_output, fmt = '%.1f')
+    if 'segment length' in params:
+        _, length = vessel_length(edge_labels)
+        out_length = zip(segment_count,length)
+        np.savetxt(output_path+'/'+file_name+'/vessel_length_'+slice_num+'.txt', out_length, fmt = '%.1f')
+    if 'diameter' in params:
+        viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
+        np.savetxt(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.txt', diameters, fmt = '%.1f')
+    
+    return
+
+def make_labelled_image(im, seg):
+    skel, edges, bp = skeletonize_vm(seg)
+    _, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
+    unique_labels = np.unique(edge_labels)[1:]
+    overlay = seg*50+edges*200
+    output = cv2.cvtColor(overlay.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    for i in unique_labels:
+        print(i)
+        seg_temp = np.zeros_like(im)
+        seg_temp[edge_labels == i] = 1
+        if np.sum(seg_temp)>5:
+            midpoint = segment_midpoint(seg_temp)
+            text_placement = [midpoint[1], midpoint[0]]
+            output = cv2.putText(img = output, text = str(i), org=text_placement, fontFace = 3, fontScale = 1, color = (0,255,255))
+    
+    return output
+
+def vessel_density(im,label, num_tiles_x, num_tiles_y):
+    density = np.zeros_like(im).astype(np.float16)
+    density_array = []
+    label[label>0] = 1
+    step_x = np.round(im.shape[0]/num_tiles_x).astype(np.int16)
+    step_y = np.round(im.shape[1]/num_tiles_y).astype(np.int16)
+    overlay = np.copy(im)
+    overlay = cv2.cvtColor(overlay.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    count = 0 
+    for x in range(0,im.shape[0], step_x):
+        for y in range(0,im.shape[1], step_y):
+            count+=1
+            tile = label[x:x+step_x-1,y:y+step_y-1]
+            numel = tile.shape[0]*tile.shape[1]
+            tile_density = np.sum(tile)/numel
+            tile_val = np.round(tile_density*1000)
+            density[x:x+step_x-1,y:y+step_y-1] = tile_val
+            density_array.append(tile_val)
+            
+            text_placement = [np.round((x+x+step_x-1)/2).astype(np.uint), np.round((y+y+step_y-1)/2).astype(np.uint)]
+            overlay = cv2.putText(img = overlay, text = str(count), org=text_placement, fontFace = 1, fontScale = 1, color = (0,255,255))
+    density = density.astype(np.uint16)
+    return density, density_array, overlay
+
+
+def branchpoint_density(label):
+    skel, edges, bp = skeletonize_vm(label)
+    _, bp_labels = cv2.connectedComponents(bp, connectivity = 8)
+    
+    skel_inds = np.argwhere(skel > 0)
+    overlay = label*50+edges*100
+    output = cv2.cvtColor(overlay.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    bp_density = []
+    measurement_number = 0
+    for i in range(0,len(skel_inds), 50):
+        measurement_number+=1
+        x = skel_inds[i][0]; y = skel_inds[i][1]
+        this_tile = bp_labels[x-25:x+25,y-25:y+25]
+        bp_number = len(np.unique(this_tile))-1
+        bp_density.append(bp_number)
+        text_placement = [y,x]
+        output = cv2.putText(img = output, text = str(measurement_number), org=text_placement, fontFace = 3, fontScale = 1, color = (0,255,255))
+    
+    
+    bp_density = np.array(bp_density)
+    bp_density[bp_density<0] = 0
+    out_list = list(zip(list(range(1,measurement_number)),bp_density))
+    return out_list, output
+
+
+
+############################################################
+def generate_file_list(file_list):    
+    accepted_file_types = ['czi', 'png', 'tif', 'tiff']
+    reduced_file_list = []
+    file_types = []
+    for file in file_list:
+        if '.' in file:
+            file_type = file.split('.')[-1]
+            if file_type in accepted_file_types:
+                reduced_file_list.append(file)
+                file_types.append(file_type)
+    return reduced_file_list, file_types
+
+
+def analyze_images(images_to_analyze, file_names, settings, out_dir):
+    seg_list = []
+    for s,t in zip(images_to_analyze, file_names):
+        seg = segment_with_settings(s,settings)
+        seg_list.append(seg)
+        this_file = t.split('_slice')[0]
+        this_slice = t.split('_')[-1]
+        suffix = '_'+this_slice+'.png'
+        if os.path.exists(out_dir+'/'+this_file) == False:
+            os.mkdir(out_dir+'/'+this_file)
+        vessel_labels = make_labelled_image(s, seg)
+        seg = seg*200
+        out_dir = out_dir+'/'+this_file+'/'
+        cv2.imwrite(out_dir+'img'+suffix,s)
+        cv2.imwrite(out_dir+'label'+suffix,seg)
+        cv2.imwrite(out_dir+'vessel_labels'+suffix,vessel_labels)
+    return seg_list
+
+def save_settings(settings, path):
+    with open(path, 'wb') as filehandle:
+        pickle.dump(settings, filehandle)
+    return
+
+def load_settings(path):
+    with open(path,'rb') as filehandle:
+        all_settings = pickle.load(filehandle)
+        settings = all_settings[0]
+        final_settings = all_settings[1]
+        if len(all_settings == 3):
+
+            czi_settings = all_settings[2]
+            return settings, final_settings, czi_settings
+    return settings, final_settings
+
+
+
 
 #####################################################################
 # DEPRECATED

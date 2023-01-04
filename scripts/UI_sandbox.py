@@ -29,6 +29,7 @@ from skimage.morphology import white_tophat, black_tophat, disk
 import easygui
 import vessel_metrics as vm
 from PIL import Image, ImageFont, ImageDraw
+import pickle
 
 opening_msg = 'Would you like to analyze a single image or batch process a full directory?'
 options = ['single image', 'directory', 'cancel']
@@ -44,7 +45,8 @@ pre_save_msg = 'Would you like to load previously saved settings?'
 pre_save = easygui.ynbox(msg = pre_save_msg)
 
 if pre_save == True:
-    settings = easygui.fileopenbox()
+    settings_path = easygui.fileopenbox()
+    settings = load_settings(settings_path)
 
 if pre_save == False:
     title = 'Segmentation settings'
@@ -97,44 +99,23 @@ if dir_analysis == 'single image':
             dim_list.append(dims)
             img, dims = vm.preprocess_czi(path,'',channel = final_settings[0])
     
-        for s,t in zip(images_to_analyze, file_names):
-            seg = segment_with_settings(s,settings)
-            seg_list.append(seg)
-            this_file = t.split('/')[-1]
-            this_slice = t.split('_')[-1]
-            suffix = '_'+this_slice+'.png'
-            if os.path.exists(output_path+'/'+this_file) == False:
-                os.mkdir(output_path+'/'+this_file)
-            vessel_labels = make_labelled_image(s, seg)
-            seg = seg*200
-            out_dir = output_path+'/'+this_file+'/'
-            cv2.imwrite(out_dir+'img'+suffix,s)
-            cv2.imwrite(out_dir+'label'+suffix,seg)
-            cv2.imwrite(out_dir+'vessel_labels'+suffix,vessel_labels)
+        vm.analyze_images(images_to_analyze, file_names, settings, output_path)
     else:
         img = cv2.imread(path,0)
-        seg = segment_with_settings(img, settings)
+        seg = vm.segment_with_settings(img, settings)
     # set up parameter analysis settings
     msg = 'Select which parameters you would like to analyze on your files'
     title = 'Parameter settings'
     choices = ['vessel density', 'branchpoint density', 'network length', 'tortuosity', 'segment length', 'diameter']
     params = easygui.multchoicebox(msg = msg, title = title, choices = choices)
     for s,t,u in zip(images_to_analyze, file_names,seg_list):
-        parameter_analysis(s,u,params,output_path,t)
+        vm.parameter_analysis(s,u,params,output_path,t)
 ####################################################################
 # Directory analysis
  
 if dir_analysis == 'directory':
     file_list = os.listdir(path)
-    reduced_file_list = []
-    file_types = []
-    accepted_file_types = ['czi', 'png', 'tif', 'tiff']
-    for file in file_list:
-        if '.' in file:
-            file_type = file.split('.')[-1]
-            if file_type in accepted_file_types:
-                reduced_file_list.append(file)
-                file_types.append(file_type)
+    reduced_file_list, file_types = generate_file_list(file_list)
     if len(set(file_types)) == 1:
         images_to_analyze = []
         file_names = []
@@ -163,19 +144,7 @@ if dir_analysis == 'directory':
                     file_split = file.split('.')[0]
                     file_names.append(file_split+'_slice'+str(i))
                     dim_list.append(dims)
-            for s,t in zip(images_to_analyze, file_names):
-                seg = segment_with_settings(s,settings)
-                this_file = t.split('_slice')[0]
-                this_slice = t.split('_')[-1]
-                suffix = '_'+this_slice+'.png'
-                if os.path.exists(output_path+'/'+this_file) == False:
-                    os.mkdir(output_path+'/'+this_file)
-                vessel_labels = make_labelled_image(s, seg)
-                seg = seg*200
-                out_dir = output_path+'/'+this_file+'/'
-                cv2.imwrite(out_dir+'img'+suffix,s)
-                cv2.imwrite(out_dir+'label'+suffix,seg)
-                cv2.imwrite(out_dir+'vessel_labels'+suffix,vessel_labels)
+            analyze_images(images_to_analyze, file_names, settings, output_path)
                 
         else:
             #input type is an image rather than a volume
@@ -184,15 +153,7 @@ if dir_analysis == 'directory':
                 images_to_analyze.append(cv2.imread(path+'/'+file,0))
                 file_split = file.split('.')[0]
                 output_dirs.append(file_split)
-            for s,t in zip(images_to_analyze,output_dirs):
-                seg = segment_with_settings(s,settings)
-                if os.path.exists(output_path+'/'+t) == False:
-                    os.mkdir(output_path+'/'+t)
-                vessel_labels = make_labelled_image(s, seg)
-                seg = seg*200
-                cv2.imwrite(output_path+'/'+t+'/img.png',s)
-                cv2.imwrite(output_path+'/'+t+'/label.png',seg)
-                cv2.imwrite(output_path+'/'+t+'/vessel_labls.png',vessel_labels)
+            analyze_images(images_to_analyze, file_names, settings, output_path)
                 
     else:
         title = 'multiple file types'
@@ -373,3 +334,44 @@ def branchpoint_density(label):
     bp_density[bp_density<0] = 0
     out_list = list(zip(list(range(1,measurement_number)),bp_density))
     return out_list, output
+
+
+
+############################################################
+def generate_file_list(file_list):    
+    accepted_file_types = ['czi', 'png', 'tif', 'tiff']
+    reduced_file_list = []
+    file_types = []
+    for file in file_list:
+        if '.' in file:
+            file_type = file.split('.')[-1]
+            if file_type in accepted_file_types:
+                reduced_file_list.append(file)
+                file_types.append(file_type)
+    return reduced_file_list, file_types
+
+
+def analyze_images(images_to_analyze, file_names, settings, out_dir):
+    for s,t in zip(images_to_analyze, file_names):
+        seg = segment_with_settings(s,settings)
+        this_file = t.split('_slice')[0]
+        this_slice = t.split('_')[-1]
+        suffix = '_'+this_slice+'.png'
+        if os.path.exists(output_path+'/'+this_file) == False:
+            os.mkdir(output_path+'/'+this_file)
+        vessel_labels = make_labelled_image(s, seg)
+        seg = seg*200
+        out_dir = output_path+'/'+this_file+'/'
+        cv2.imwrite(out_dir+'img'+suffix,s)
+        cv2.imwrite(out_dir+'label'+suffix,seg)
+        cv2.imwrite(out_dir+'vessel_labels'+suffix,vessel_labels)
+
+def save_settings(settings, path):
+    with open(path, 'wb') as filehandle:
+        pickle.dump(settings, filehandle)
+    return
+
+def load_settings(path):
+    with open(path,'rb') as filehandle:
+        settings = pickle.load(filehandle)
+    return settings

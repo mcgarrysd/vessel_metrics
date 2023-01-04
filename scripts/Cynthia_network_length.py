@@ -19,7 +19,8 @@ from skimage.morphology import skeletonize
 from aicsimageio import AICSImage
 import timeit
 
-data_path = '/media/sean/SP PHD U3/from_home/cynthia_network_length/oct_19/'
+data_path = '/media/sean/SP PHD U3/from_home/cynthia_network_length/Jan2_23/' 
+
 
 file_list = os.listdir(data_path+'Raw/')
 
@@ -37,7 +38,7 @@ for file in file_list:
     
     volume, dims = vm.preprocess_czi(data_path+'Raw/',file, channel = 1)
     slice_range = len(volume)
-    slice_thickness = np.round(slice_range/2).astype(np.uint8)
+    slice_thickness = slice_range #np.round(slice_range/2).astype(np.uint8)
     reslice = vm.reslice_image(volume,slice_thickness)
     if mkdir == True:
         os.mkdir(data_path+'Processed/'+prefix)
