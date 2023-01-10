@@ -194,17 +194,23 @@ The recommended workflow is to operate on a single image from your dataset, opti
 #### Segmentation settings
 * Filter
 Determines which filter will be used. Default meijering. Accepted responses: 'meijering', 'sato', 'frangi', 'jerman'. Jerman filter recommended for low contrast data. 
+
 * Threshold
+
 Threshold used for final segmentation. Values are 0-255, vessel metrics applies a contrast stretch to data prior to thresholding to ensure consistency across data acquired with varying microscope settings. Default value 40.
 * Sigma 1 and Sigma 2
+
 Conceptually the sigma values describe the thickness of vessels the filters enhance. This value is always expressed in pixels. Accepted input is a comma separated series Start value, End Value, Step Size. i.e. 1,8,1. The stop value should be around 80% of the maximal vessel size expected in your dataset, choosing a larger value tends to cause overestimation of vessel boundaries. 
 
 The second sigma parameter is only used for multi scale processing, if your image contains major vessels and microvasculature both the multi scale processing produces better results. Rather than inputting a sigma value of 1,20,5 you will see better results with 1,8,1, and 10,20,5. 
 * Hole size and Ditzle size
+
 Accepted inputs are integers. Small holes (area less than the specified value) are closed in large binary objects post segmentation. Ditzle size removes binary objects less than the specified size. The 'ditzles' are usually partially formed vessels or vessels with poor signal along the periphery of the image.
 * Preprocess
+
 Whether to preprocess the data. If you've applied your own preprocessing prior to loading vessel metrics select no. Preprocessing picks up at vessel enhancement. 
 * Multi scale
+
 Whether to do a multi scale enhancement. Useful if there is a large discrepancy in vessel size within your image. 
 
 #### CZI Processing
