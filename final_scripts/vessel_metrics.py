@@ -26,6 +26,7 @@ from aicsimageio import AICSImage
 from skimage import data, restoration, util # deprecated preproc
 import timeit
 from skimage.morphology import white_tophat, black_tophat, disk
+import pickle
 
 ####################################################################
 # functions likely to be useful implementing vessel metrics independently on your own data
@@ -1092,40 +1093,43 @@ def segment_with_settings(im, settings):
     seg = segment_image(im, filter = settings['filter'], sigma1 = settings['sigma1'], sigma2 = settings['sigma2'], hole_size = settings['hole size'], ditzle_size = settings['ditzle size'], preprocess = settings['preprocess'], multi_scale = settings['multi scale'])
     return seg
 
-def parameter_analysis(im, seg, params,output_path, file_name, slice_num = ''):
+def parameter_analysis(im, seg, params,output_path, file_name):
     seg[seg>0] = 1
     skel, edges, bp = skeletonize_vm(seg)
     edge_count, edge_labels = cv2.connectedComponents(edges)
     overlay = seg*150+skel*200
-    cv2.imwrite(output_path+'/'+file_name+'/vessel_centerlines'+slice_num+'.png',seg)
+    this_file = file_name.split('_slice')[0]
+    this_slice = file_name.split('_')[-1]
+    suffix = '_'+this_slice+'.png'
+    cv2.imwrite(output_path+'/'+this_file+'/vessel_centerlines_'+this_slice+'.png',overlay)
     segment_count = list(range(0, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
         overlay_segmentation(im, density_image)
-        cv2.imwrite(output_path+'/'+file_name+'/label_'+slice_num+'.png',seg)
-        plt.savefig(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.png', bbox_inches = 'tight')
+        cv2.imwrite(output_path+'/'+this_file+'/label_'+this_slice+'.png',seg)
+        plt.savefig(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.png', bbox_inches = 'tight')
         plt.close('all')
-        cv2.imwrite(output_path+'/'+file_name+'/vessel_density_overlay_'+slice_num+'.png', overlay)
+        cv2.imwrite(output_path+'/'+this_file+'/vessel_density_overlay_'+this_slice+'.png', overlay)
         out_dens = list(zip(list(range(0,255)), density_array))
-        np.savetxt(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.txt', out_dens, fmt = '%.1f')
+        np.savetxt(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.txt', out_dens, fmt = '%.1f')
     if 'branchpoint density' in params:
         bp_density, overlay = branchpoint_density(seg)
-        np.savetxt(output_path+'/'+file_name+'/network_length'+slice_num+'.txt', bp_density, fmt = '%.1f')
+        np.savetxt(output_path+'/'+this_file+'/network_length'+this_slice+'.txt', bp_density, fmt = '%.1f')
     if 'network length' in params:
         net_length = network_length(edges)
         net_length_out = []
         net_length_out.append(net_length)
-        np.savetxt(output_path+'/'+file_name+'/network_length'+slice_num+'.txt', net_length_out, fmt = '%.1f')
+        np.savetxt(output_path+'/'+this_file+'/network_length'+this_slice+'.txt', net_length_out, fmt = '%.1f')
     if 'tortuosity' in params:
         tort_output = tortuosity(edge_labels)
-        np.savetxt(output_path+'/'+file_name+'/tortuosity_'+slice_num+'.txt', tort_output, fmt = '%.1f')
+        np.savetxt(output_path+'/'+this_file+'/tortuosity_'+this_slice+'.txt', tort_output, fmt = '%.1f')
     if 'segment length' in params:
         _, length = vessel_length(edge_labels)
-        out_length = zip(segment_count,length)
-        np.savetxt(output_path+'/'+file_name+'/vessel_length_'+slice_num+'.txt', out_length, fmt = '%.1f')
+        out_length = list(zip(segment_count,length))
+        np.savetxt(output_path+'/'+this_file+'/vessel_length_'+this_slice+'.txt', out_length, fmt = '%.1f')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(output_path+'/'+file_name+'/vessel_density_'+slice_num+'.txt', diameters, fmt = '%.1f')
+        np.savetxt(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.txt', diameters, fmt = '%.1f')
     
     return
 

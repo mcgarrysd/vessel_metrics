@@ -61,7 +61,7 @@ if pre_save == False:
     message = 'Leave blank to use default settings'
     fields = ['Filter','Threshold','sigma1', 'sigma2', 'hole size', 'ditzle size', 'Preprocess? (yes/no)', 'multi scale? (yes/no)']
     segmentation_settings = easygui.multenterbox(message,title, fields)
-    settings = make_segmentation_settings(segmentation_settings)
+    settings = vm.make_segmentation_settings(segmentation_settings)
     msg = 'Select which parameters you would like to analyze on your files'
     title = 'Parameter settings'
     choices = ['vessel density', 'branchpoint density', 'network length', 'tortuosity', 'segment length', 'diameter']
