@@ -13,14 +13,14 @@ This project is actively under development. A user guide for the user interface 
 Data input accepted as either native .czi files or in image format
 
 ### Image preprocessing
-A variety of commonly used preprocessing techniques are included, including rolling ball background suppression, smoothing, contrast stretching and histogram equalization, and 4 vessel enhancement filters.
+A variety of commonly used preprocessing techniques are included, including tophat background suppression, smoothing, contrast stretching and histogram equalization, and 4 vessel enhancement filters.
 
-Jerman vessel enhancement filter is included with this software package.
+A python implementation of the 2d Jerman vessel enhancement filter is included with this software package.
 
 ![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/raw_im.png "Raw image")
 
 ### Vessel segmentation
-Vessel segmentation included is optimized for confocal imaging. The default pipeline performs a rolling ball filter, background smoothing, a contrast stretch, and a frangi filter before binarizing the image and performing morphological operations to adjust for common artifacts. Segmentation accuracy can be verified using a jaccard index or vessel specific accuracy metrics (connectivity, area, and length)
+Vessel segmentation included is optimized for confocal imaging. The default pipeline performs a top hat filter, background smoothing, a contrast stretch, and a frangi filter before binarizing the image and performing morphological operations to adjust for common artifacts. Segmentation accuracy can be verified using a jaccard index or vessel specific accuracy metrics (connectivity, area, and length)
 
 ![alt text](https://github.com/mcgarrysd/vessel_metrics/blob/main/sample_ims/segmentation.png "Vessel segmentation")
 
@@ -99,6 +99,9 @@ image = contrast_stretch(image, upper_lim = upper_lim, lower_lim = lower_lim)
 # thresh (default 60) is the threshold value to binarize the final enhanced image
 # Your sigma numbers should cover the range of vessel diameters you expect in your image. It's ideal to set the max value smaller than the biggest vessel in your image, as the filter tends to overestimate the vessel boundaries otherwise.
 vessel_seg = vm.segment_image(image, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = range(10,20,5), hole_size = 50, ditzle_size = 500, thresh = 60, preprocess = True, multi_scale = True)
+label = cv2.imread('/path/to/label.png',0)
+length, area, conn, Q = vm.cal(label.astype(np.uint8), seg.astype(np.uint8))
+jaccard = vm.jaccard(label,seg)
 
 ```
 ### Vessel architecture
@@ -106,6 +109,9 @@ vessel_seg = vm.segment_image(image, filter = 'meijering', sigma1 = range(1,8,1)
 # The skeletonize_vm function uses the skimage skeletonize function and then post processes the skeleton to fix common errors in skeletonizing vascular trees.
 skel, edges, bp = vm.skeletonize_vm(vessel_seg)
 _, edge_labels = cv2.connectedComponents(edges)
+
+_, branchpoints = vm.find_branchpoints(skel)
+coords, endpoints = vm.find_endpoints(edges)
 ```
 ### Fully automatic vessel diameter calculation
 ``` Python
@@ -131,7 +137,7 @@ net_length = vm.network_length(edges)
 # 16,16 denotes how many x and y chunks to break the image into (in this case 16 and 16)
 _, vessel_density = vm.vessel_density(vessel_preproc, vessel_seg, 16, 16)
 
-bp_density = vm.branchpoint_density(skel, vessel_seg)
+bp_density = vm.branchpoint_density(skel, seg)
 
 # length is a list containing the segment length for every segment in edge_labels
 _, length = vm.vessel_length(edge_labels)
@@ -172,4 +178,5 @@ for u in unique_labels:
 # alpha controls opacity
 # more complex overlays can be made by for example adding the segmentation and skeleton together
 vm.overlay_segmentation(vessel_preproc, vessel_seg, alpha = 0.5)
+vm.show_im(image)
 ```
