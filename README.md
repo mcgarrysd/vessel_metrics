@@ -193,6 +193,7 @@ The recommended workflow is to operate on a single image from your dataset, opti
 
 #### Segmentation settings
 * Filter
+
 Determines which filter will be used. Default meijering. Accepted responses: 'meijering', 'sato', 'frangi', 'jerman'. Jerman filter recommended for low contrast data. 
 
 * Threshold
