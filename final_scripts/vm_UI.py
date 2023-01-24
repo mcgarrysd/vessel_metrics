@@ -107,7 +107,7 @@ if dir_analysis == 'single image':
         if final_settings[1] > img.shape[2]:
             final_settings[1] = default_settings[1]
 
-        all_settings = [settings, final_settings]
+        all_settings = [settings, params, final_settings]
         
         file_names = []
         reslice = vm.reslice_image(img,final_settings[1])
@@ -171,6 +171,8 @@ if dir_analysis == 'directory':
                 file_split = file.split('.')[0]
                 output_dirs.append(file_split)
             seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
+        for s,t,u in zip(images_to_analyze, file_names, seg_list):
+            vm.parameter_analysis(s,u,params,output_path,t)
                 
     else:
         title = 'multiple file types'
