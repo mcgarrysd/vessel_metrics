@@ -1101,35 +1101,36 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     this_file = file_name.split('_slice')[0]
     this_slice = file_name.split('_')[-1]
     suffix = '_'+this_slice+'.png'
-    cv2.imwrite(output_path+'/'+this_file+'/vessel_centerlines_'+this_slice+'.png',overlay)
+    os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png')
+    cv2.imwrite(os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png'),overlay)
     segment_count = list(range(0, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
         overlay_segmentation(im, density_image)
-        cv2.imwrite(output_path+'/'+this_file+'/label_'+this_slice+'.png',seg)
-        plt.savefig(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.png', bbox_inches = 'tight')
+        cv2.imwrite(os.path.join(output_path,this_file,'label_'+this_slice+'.png'),seg)
+        plt.savefig(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.png'), bbox_inches = 'tight')
         plt.close('all')
-        cv2.imwrite(output_path+'/'+this_file+'/vessel_density_overlay_'+this_slice+'.png', overlay)
+        cv2.imwrite(os.path.join(output_path,this_file,'vessel_density_overlay_'+this_slice+'.png'), overlay)
         out_dens = list(zip(list(range(0,255)), density_array))
-        np.savetxt(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.txt', out_dens, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), out_dens, fmt = '%.1f')
     if 'branchpoint density' in params:
         bp_density, overlay = branchpoint_density(seg)
-        np.savetxt(output_path+'/'+this_file+'/network_length'+this_slice+'.txt', bp_density, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), bp_density, fmt = '%.1f')
     if 'network length' in params:
         net_length = network_length(edges)
         net_length_out = []
         net_length_out.append(net_length)
-        np.savetxt(output_path+'/'+this_file+'/network_length'+this_slice+'.txt', net_length_out, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), net_length_out, fmt = '%.1f')
     if 'tortuosity' in params:
         tort_output = tortuosity(edge_labels)
-        np.savetxt(output_path+'/'+this_file+'/tortuosity_'+this_slice+'.txt', tort_output, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'tortuosity_'+this_slice+'.txt'), tort_output, fmt = '%.1f')
     if 'segment length' in params:
         _, length = vessel_length(edge_labels)
         out_length = list(zip(segment_count,length))
-        np.savetxt(output_path+'/'+this_file+'/vessel_length_'+this_slice+'.txt', out_length, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(output_path+'/'+this_file+'/vessel_density_'+this_slice+'.txt', diameters, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f')
     
     return
 
@@ -1140,7 +1141,6 @@ def make_labelled_image(im, seg):
     overlay = seg*50+edges*200
     output = cv2.cvtColor(overlay.astype(np.uint8), cv2.COLOR_GRAY2BGR)
     for i in unique_labels:
-        print(i)
         seg_temp = np.zeros_like(im)
         seg_temp[edge_labels == i] = 1
         if np.sum(seg_temp)>5:
@@ -1217,23 +1217,20 @@ def generate_file_list(file_list):
 
 def analyze_images(images_to_analyze, file_names, settings, out_dir):
     seg_list = []
-    count = 0
     for s,t in zip(images_to_analyze, file_names):
-        count+=1
-        print(count)
         seg = segment_with_settings(s,settings)
         seg_list.append(seg)
         this_file = t.split('_slice')[0]
         this_slice = t.split('_')[-1]
         suffix = '_'+this_slice+'.png'
-        if os.path.exists(out_dir+'/'+this_file) == False:
-            os.mkdir(out_dir+'/'+this_file)
+        if os.path.exists(os.path.join(out_dir,this_file)) == False:
+            os.mkdir(os.path.join(out_dir,this_file))
         vessel_labels = make_labelled_image(s, seg)
         seg = seg*200
-        output_path = out_dir+'/'+this_file
-        cv2.imwrite(output_path+'/img'+suffix,s)
-        cv2.imwrite(output_path+'/label'+suffix,seg)
-        cv2.imwrite(output_path+'/vessel_labels'+suffix,vessel_labels)
+        output_path = os.path.join(out_dir,this_file)
+        cv2.imwrite(os.path.join(output_path,'img'+suffix),s)
+        cv2.imwrite(os.path.join(output_path,'label'+suffix),seg)
+        cv2.imwrite(os.path.join(output_path,'vessel_labels'+suffix),vessel_labels)
     return seg_list
 
 def save_settings(settings, path):

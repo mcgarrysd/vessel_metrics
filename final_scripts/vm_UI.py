@@ -152,7 +152,7 @@ if dir_analysis == 'directory':
                 final_settings[1] = int(final_settings[1])
                 all_settings = [settings, final_settings]
             for file in file_list:
-                img, dims = vm.preprocess_czi(path,'/'+file,channel = final_settings[0])
+                img, dims = vm.preprocess_czi(os.path.join(path,file),'',channel = final_settings[0])
                 
                 reslice = vm.reslice_image(img,final_settings[1])
                 for i in range(reslice.shape[0]):
@@ -167,7 +167,7 @@ if dir_analysis == 'directory':
             output_dirs = []
             all_settings = settings
             for file in reduced_file_list:
-                images_to_analyze.append(cv2.imread(path+'/'+file,0))
+                images_to_analyze.append(cv2.imread(os.path.join(path,file),0))
                 file_split = file.split('.')[0]
                 output_dirs.append(file_split)
             seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
@@ -180,5 +180,5 @@ if dir_analysis == 'directory':
         easygui.codebox(msg = msg, title = title, text = msg)        
 
 if save_ans == True:
-    settings_path = output_path+'/settings.data'
+    settings_path = os.path.join(output_path,'settings.data')
     vm.save_settings(all_settings, settings_path)
