@@ -93,7 +93,7 @@ def overlay_segmentation(im,label, alpha = 0.5, contrast_adjust = False, im_cmap
     plt.figure()
     plt.imshow(im, 'gray', interpolation = 'none')
     plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
-    plt.show()
+    plt.show(block = False)
     
 def generate_roi(im):
     roi = cv2.selectROI(im.astype(np.uint8))
@@ -136,7 +136,7 @@ def tortuosity(edge_labels):
         this_segment = np.zeros_like(edge_labels)
         this_segment[edge_labels == u] = 1
         end_inds = np.argwhere(endpoint_labeled == u)
-        if end_inds.size>0:
+        if end_inds.size==4:
             end_point_line = line(end_inds[0,0],end_inds[0,1],end_inds[1,0],end_inds[1,1])
             endpoint_distance = np.max(np.shape(end_point_line))
             segment_length = np.sum(this_segment)
@@ -899,8 +899,6 @@ def segment_midpoint(segment):
             distances.append(distance.chebyshev(center_of_mass, this_pt))
     else:
         first_endpoint = endpoint_index[0][0], endpoint_index[1][0]
-        
-            
         distances = []
         for i in range(len(segment_indexes)):
             this_pt = segment_indexes[i][0], segment_indexes[i][1]
@@ -1144,10 +1142,13 @@ def make_labelled_image(im, seg):
         seg_temp = np.zeros_like(im)
         seg_temp[edge_labels == i] = 1
         if np.sum(seg_temp)>5:
-            midpoint = segment_midpoint(seg_temp)
-            text_placement = [midpoint[1], midpoint[0]]
-            output = cv2.putText(img = output, text = str(i), org=text_placement, fontFace = 3, fontScale = 1, color = (0,255,255))
-    
+            try:
+                midpoint = segment_midpoint(seg_temp)
+                text_placement = [midpoint[1], midpoint[0]]
+                output = cv2.putText(img = output, text = str(i), org=text_placement, fontFace = 3, fontScale = 1, color = (0,255,255))
+            except:
+                print('segment ' + str(i) + ' failed')
+           
     return output
 
 def vessel_density(im,label, num_tiles_x, num_tiles_y):
@@ -1241,13 +1242,7 @@ def save_settings(settings, path):
 def load_settings(path):
     with open(path,'rb') as filehandle:
         all_settings = pickle.load(filehandle)
-        if type(all_settings) == list:
-            settings = all_settings[0]
-            final_settings = all_settings[1]
-            return settings, final_settings
-        else:
-            settings = all_settings
-            return settings
+    return all_settings
 
 
 

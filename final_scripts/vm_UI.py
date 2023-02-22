@@ -38,9 +38,10 @@ if pre_save == True:
     settings_path = easygui.fileopenbox()
     all_settings = vm.load_settings(settings_path)
     settings = all_settings[0]
-    final_settings = all_settings[1]
+    params = all_settings[1]
     if len(all_settings)==3:
-        czi_settings = all_settings[2]
+        final_settings = all_settings[2]
+    save_ans = False
 
 if pre_save == False:
     settings_exp_msg = 'Click yes if you would like to see an explanation of the input parameters for your segmentation'
@@ -79,9 +80,11 @@ seg_list = []
 ####################################################################
 # single image analysis
 if dir_analysis == 'single image':
-    file_split = path.split('/')[-1]
+    temp_path = path.replace('\\','/') # fixes issues with windows paths
+    file_split = temp_path.split('/')[-1]
     file_name = file_split.split('.')[0]
     file_type = file_split.split('.')[-1]
+    print('file name: ' + file_name + '\n file type: ' + file_type)
     # set up parameter analysis settings
     if file_type == 'czi':
         if pre_save == False:
@@ -121,7 +124,7 @@ if dir_analysis == 'single image':
     else:
         img = cv2.imread(path,0)
         seg = vm.segment_with_settings(img, settings)
-        all_settings = settings
+        all_settings = [settings, params]
     for s,t,u in zip(images_to_analyze, file_names, seg_list):
         vm.parameter_analysis(s,u,params,output_path,t)
 
@@ -150,8 +153,8 @@ if dir_analysis == 'directory':
                         final_settings.append(s)
                 final_settings[0] = int(final_settings[0])
                 final_settings[1] = int(final_settings[1])
-                all_settings = [settings, final_settings]
-            for file in file_list:
+                all_settings = [settings, params, final_settings]
+            for file in reduced_file_list:
                 img, dims = vm.preprocess_czi(os.path.join(path,file),'',channel = final_settings[0])
                 
                 reslice = vm.reslice_image(img,final_settings[1])
@@ -165,7 +168,7 @@ if dir_analysis == 'directory':
         else:
             #input type is an image rather than a volume
             output_dirs = []
-            all_settings = settings
+            all_settings = [settings, params]
             for file in reduced_file_list:
                 images_to_analyze.append(cv2.imread(os.path.join(path,file),0))
                 file_split = file.split('.')[0]
