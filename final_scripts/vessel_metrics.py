@@ -38,7 +38,8 @@ def segment_image(im, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = rang
         enh_sig1 = meijering(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = meijering(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
     elif filter == 'sato':
-        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+        enh_sig1 = sato(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = sato(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
     elif filter == 'frangi':
         enh_sig1 = frangi(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = frangi(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
@@ -1054,6 +1055,7 @@ def make_segmentation_settings(settings_list):
         res = tuple(map(int, settings_dict['sigma1'].split(' ')))
         try:
             new_sigma = range(res[0], res[1], res[2])
+            settings_dict['sigma1'] = new_sigma
         except:
             print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
             settings_dict['sigma1'] = range(1,8,1)
@@ -1061,6 +1063,7 @@ def make_segmentation_settings(settings_list):
         res = tuple(map(int, settings_dict['sigma2'].split(' ')))
         try:
             new_sigma = range(res[0], res[1], res[2])
+            settings_dict['sigma2'] = new_sigma
         except:
             print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
             settings_dict['sigma2'] = range(10,20,5)
@@ -1128,7 +1131,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
         np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_diameter_'+this_slice+'.txt'), diameters, fmt = '%.1f')
     
     return
 
