@@ -121,12 +121,14 @@ if dir_analysis == 'single image':
             dim_list.append(dims)
     
         seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
+        for s,t,u in zip(images_to_analyze, file_names, seg_list):
+            vm.parameter_analysis(s,u,params,output_path,t)
     else:
         img = cv2.imread(path,0)
-        seg = vm.segment_with_settings(img, settings)
         all_settings = [settings, params]
-    for s,t,u in zip(images_to_analyze, file_names, seg_list):
-        vm.parameter_analysis(s,u,params,output_path,t)
+        seg = vm.analyze_single_image(img, file_name, settings, output_path)
+        vm.parameter_analysis(img, seg, params, output_path,file_name)
+
 
 ##################################################################
 # Directory analysis

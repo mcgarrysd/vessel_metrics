@@ -38,8 +38,7 @@ def segment_image(im, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = rang
         enh_sig1 = meijering(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = meijering(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
     elif filter == 'sato':
-        enh_sig1 = sato(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
-        enh_sig2 = sato(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
+        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
     elif filter == 'frangi':
         enh_sig1 = frangi(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = frangi(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
@@ -1055,7 +1054,6 @@ def make_segmentation_settings(settings_list):
         res = tuple(map(int, settings_dict['sigma1'].split(' ')))
         try:
             new_sigma = range(res[0], res[1], res[2])
-            settings_dict['sigma1'] = new_sigma
         except:
             print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
             settings_dict['sigma1'] = range(1,8,1)
@@ -1063,7 +1061,6 @@ def make_segmentation_settings(settings_list):
         res = tuple(map(int, settings_dict['sigma2'].split(' ')))
         try:
             new_sigma = range(res[0], res[1], res[2])
-            settings_dict['sigma2'] = new_sigma
         except:
             print('invalid sigma input, sigma is input as start stop step, i.e. 1 8 1 default values will be used')
             settings_dict['sigma2'] = range(10,20,5)
@@ -1101,14 +1098,16 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     overlay = seg*150+skel*200
     this_file = file_name.split('_slice')[0]
     this_slice = file_name.split('_')[-1]
-    suffix = '_'+this_slice+'.png'
-    os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png')
+    if this_file == this_slice:
+        this_slice = ''
+        suffix = '.png'
+    else:
+        suffix = '_'+this_slice+'.png'
     cv2.imwrite(os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png'),overlay)
     segment_count = list(range(0, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
         overlay_segmentation(im, density_image)
-        cv2.imwrite(os.path.join(output_path,this_file,'label_'+this_slice+'.png'),seg)
         plt.savefig(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.png'), bbox_inches = 'tight')
         plt.close('all')
         cv2.imwrite(os.path.join(output_path,this_file,'vessel_density_overlay_'+this_slice+'.png'), overlay)
@@ -1131,7 +1130,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
         np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(os.path.join(output_path,this_file,'vessel_diameter_'+this_slice+'.txt'), diameters, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f')
     
     return
 
@@ -1236,6 +1235,20 @@ def analyze_images(images_to_analyze, file_names, settings, out_dir):
         cv2.imwrite(os.path.join(output_path,'label'+suffix),seg)
         cv2.imwrite(os.path.join(output_path,'vessel_labels'+suffix),vessel_labels)
     return seg_list
+
+def analyze_single_image(image, file_name, settings, out_dir):
+    seg = segment_with_settings(image,settings)
+    suffix = '.png'
+    file_base = file_name.split('.')[0]
+    if os.path.exists(os.path.join(out_dir,file_base)) == False:
+        os.mkdir(os.path.join(out_dir,file_base))
+    vessel_labels = make_labelled_image(image, seg)
+    seg = seg*200
+    final_path = os.path.join(out_dir,file_base)
+    cv2.imwrite(os.path.join(final_path,'img'+suffix),image)
+    cv2.imwrite(os.path.join(final_path,'label'+suffix),seg)
+    cv2.imwrite(os.path.join(final_path,'vessel_labels'+suffix),vessel_labels)
+    return seg
 
 def save_settings(settings, path):
     with open(path, 'wb') as filehandle:
