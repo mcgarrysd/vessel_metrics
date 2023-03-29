@@ -248,9 +248,10 @@ def preprocess_czi(input_directory,file_name, channel = 0):
     xdim = dims[2]
     out_dims = [zdim, ydim, xdim]
     image = np.squeeze(img.data)
-    im_channel = image[channel,:,:,:]
-    im_channel = normalize_contrast(im_channel)
-    return im_channel, out_dims
+    if image.ndim == 4:
+        image = image[channel,:,:,:]
+    image = normalize_contrast(image)
+    return image, out_dims
     
 def czi_projection(volume,axis):
     projection = np.max(volume, axis = axis)
@@ -1104,7 +1105,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     else:
         suffix = '_'+this_slice+'.png'
     cv2.imwrite(os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png'),overlay)
-    segment_count = list(range(0, edge_count))
+    segment_count = list(range(1, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
         overlay_segmentation(im, density_image)
@@ -1112,25 +1113,25 @@ def parameter_analysis(im, seg, params,output_path, file_name):
         plt.close('all')
         cv2.imwrite(os.path.join(output_path,this_file,'vessel_density_overlay_'+this_slice+'.png'), overlay)
         out_dens = list(zip(list(range(0,255)), density_array))
-        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), out_dens, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), out_dens, fmt = '%.1f', delimiter = ',')
     if 'branchpoint density' in params:
         bp_density, overlay = branchpoint_density(seg)
-        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), bp_density, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), bp_density, fmt = '%.1f', delimiter = ',')
     if 'network length' in params:
         net_length = network_length(edges)
         net_length_out = []
         net_length_out.append(net_length)
-        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), net_length_out, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), net_length_out, fmt = '%.1f', delimiter = ',')
     if 'tortuosity' in params:
         tort_output = tortuosity(edge_labels)
-        np.savetxt(os.path.join(output_path,this_file,'tortuosity_'+this_slice+'.txt'), tort_output, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'tortuosity_'+this_slice+'.txt'), tort_output, fmt = '%.1f', delimiter = ',')
     if 'segment length' in params:
         _, length = vessel_length(edge_labels)
         out_length = list(zip(segment_count,length))
-        np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f', delimiter = ',')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f', delimiter = ',')
     
     return
 
