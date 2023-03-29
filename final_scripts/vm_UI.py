@@ -174,7 +174,7 @@ if dir_analysis == 'directory':
             for file in reduced_file_list:
                 images_to_analyze.append(cv2.imread(os.path.join(path,file),0))
                 file_split = file.split('.')[0]
-                output_dirs.append(file_split)
+                file_names.append(file_split)
             seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
         for s,t,u in zip(images_to_analyze, file_names, seg_list):
             vm.parameter_analysis(s,u,params,output_path,t)
