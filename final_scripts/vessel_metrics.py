@@ -123,6 +123,7 @@ def fill_holes(label_binary, hole_size):
     skel = skeletonize(label_mask)
     return skel, label_mask
 
+
 def tortuosity(edge_labels):
     edges = np.zeros_like(edge_labels)
     edges[edge_labels>0]=1
@@ -1131,7 +1132,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
         np.savetxt(os.path.join(output_path,this_file,'vessel_length_'+this_slice+'.txt'), out_length, fmt = '%.1f', delimiter = ',')
     if 'diameter' in params:
         viz, diameters = whole_anatomy_diameter(im, seg, edge_labels, minimum_length = 25, pad_size = 50)
-        np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), diameters, fmt = '%.1f', delimiter = ',')
+        np.savetxt(os.path.join(output_path,this_file,'vessel_diameter_'+this_slice+'.txt'), diameters, fmt = '%.1f', delimiter = ',')
     
     return
 
