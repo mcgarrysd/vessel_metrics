@@ -1276,7 +1276,6 @@ def vessel_density(im,label, num_tiles_x, num_tiles_y):
     count = 0 
     for x in range(0,im.shape[0], step_x):
         for y in range(0,im.shape[1], step_y):
-            count+=1
             tile = label[x:x+step_x-1,y:y+step_y-1]
             numel = tile.shape[0]*tile.shape[1]
             tile_density = np.sum(tile)/numel
@@ -1286,6 +1285,7 @@ def vessel_density(im,label, num_tiles_x, num_tiles_y):
             
             text_placement = [np.round((y+y+step_y-1)/2).astype(np.uint),np.round((x+x+step_x-1)/2).astype(np.uint)]
             overlay = cv2.putText(img = overlay, text = str(count), org=text_placement, fontScale = 1, fontFace = cv2.FONT_HERSHEY_SIMPLEX, color = (0,255,255))
+            count+=1
     density = density.astype(np.uint16)
     return density, density_array, overlay
 
