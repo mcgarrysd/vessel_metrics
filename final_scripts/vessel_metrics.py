@@ -27,6 +27,8 @@ from skimage import data, restoration, util # deprecated preproc
 import timeit
 from skimage.morphology import white_tophat, black_tophat, disk
 import pickle
+import time
+import easygui
 
 ####################################################################
 # functions likely to be useful implementing vessel metrics independently on your own data
@@ -38,7 +40,8 @@ def segment_image(im, filter = 'meijering', sigma1 = range(1,8,1), sigma2 = rang
         enh_sig1 = meijering(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = meijering(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
     elif filter == 'sato':
-        enhanced_im = sato(im, sigmas = sigmas, mode = 'reflect', black_ridges = False)
+        enh_sig1 = sato(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
+        enh_sig2 = sato(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
     elif filter == 'frangi':
         enh_sig1 = frangi(im, sigmas = sigma1, mode = 'reflect', black_ridges = False)
         enh_sig2 = frangi(im, sigmas = sigma2, mode = 'reflect', black_ridges = False)
@@ -94,16 +97,7 @@ def overlay_segmentation(im,label, alpha = 0.5, contrast_adjust = False, im_cmap
     plt.imshow(im, 'gray', interpolation = 'none')
     plt.imshow(masked, 'jet', interpolation = 'none', alpha = alpha)
     plt.show(block = False)
-    
-def generate_roi(im):
-    roi = cv2.selectROI(im.astype(np.uint8))
-    cv2.destroyWindow('select')
-    return roi
-
-def crop_roi(im, roi):
-    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
-    return im_out
-
+ 
 ####################################################################
 
 def fill_holes(label_binary, hole_size):
@@ -254,6 +248,7 @@ def preprocess_czi(input_directory,file_name, channel = 0):
     image = normalize_contrast(image)
     return image, out_dims
     
+
 def czi_projection(volume,axis):
     projection = np.max(volume, axis = axis)
     return projection
@@ -662,7 +657,6 @@ def scatter_boxplot(df, group, column, alpha = 0.4):
         vals.append(subdf[column].tolist())
         xs.append(np.random.normal(i+1, 0.04, subdf.shape[0]))
     plt.figure()   
-    plt.title = 'test'
     plt.boxplot(vals, labels = names, showfliers=False)
     ngroup = len(vals)
     clevels = np.linspace(0., 1., ngroup)
@@ -855,6 +849,7 @@ def visualize_vessel_diameter(edge_labels, segment_number, seg, im, use_label = 
     if cross_length == 0:
         diameter = 0
         mean_diameter = 0
+        print('cross length 0')
         return diameter, mean_diameter, viz
     
     diameter = []
@@ -956,13 +951,13 @@ def plot_crossline(im, cross_index, bright = False):
         out[i[0], i[1]] = val
     return out
 
-def find_crossline_length(vx,vy,point,im):
-    distance = 5
+def find_crossline_length(bx,by,point,im):
+    d = 5
     diam = 0
     im_size = im.shape[0]
     while diam == 0:
-        distance +=5
-        coords, cross_index = make_crossline(vx,vy,point,distance)
+        d +=5
+        coords, cross_index = make_crossline(bx,by,point,d)
         if all(i<im_size for i in coords):
             seg_val = []
             for i in cross_index:
@@ -974,7 +969,10 @@ def find_crossline_length(vx,vy,point,im):
                 num_steps = len(steps)
                 if num_steps == 2:
                     diam = abs(steps[1]-steps[0])
-            if distance >100:
+                if num_steps>2:
+                    new_steps = [x-steps[i-1] if i else None for i,x in enumerate(steps)][1:]
+                    diam = np.max(new_steps)
+            if d >100:
                 break
         else:
             break
@@ -1117,7 +1115,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
         np.savetxt(os.path.join(output_path,this_file,'vessel_density_'+this_slice+'.txt'), out_dens, fmt = '%.1f', delimiter = ',')
     if 'branchpoint density' in params:
         bp_density, overlay = branchpoint_density(seg)
-        np.savetxt(os.path.join(output_path,this_file,'network_length'+this_slice+'.txt'), bp_density, fmt = '%.1f', delimiter = ',')
+        np.savetxt(os.path.join(output_path,this_file,'branchpoint_density_'+this_slice+'.txt'), bp_density, fmt = '%.1f', delimiter = ',')
     if 'network length' in params:
         net_length = network_length(edges)
         net_length_out = []
@@ -1136,6 +1134,118 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     
     return
 
+#########################################################################
+# ROI CODE
+
+def crop_roi(im, roi):
+    im_out = im[roi[1]:roi[1]+roi[3],roi[0]:roi[0]+roi[2]]
+    return im_out
+
+def generate_roi(im):
+    im_size = im.shape
+    if max(im_size)>1024:
+        aspect_ratio = im_size[0]/im_size[1]
+        if aspect_ratio>1:
+            window_size = (1024,int(im_size[1]/aspect_ratio))
+        elif aspect_ratio<1:
+            window_size = (1024, int(im_size[1]*aspect_ratio))
+        elif aspect_ratio == 1:
+            window_size = (1024,1024)
+        else:
+            window_size = im_size
+    cv2.namedWindow("Select ROI then space bar", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Select ROI then space bar", window_size[0],window_size[1])
+    roi = cv2.selectROI("Select ROI then space bar", im.astype(np.uint8))
+    cv2.destroyWindow("Select ROI then space bar")
+    return roi
+
+def crop_image(im):        
+    r = generate_roi(im)
+    im_out = crop_roi(im, r)
+    return im_out, r
+
+def UI_crop_image(im,output_dir):
+    im_out, r = crop_image(im)
+    im_copy = im.copy()
+    im_roi = cv2.rectangle(im_copy, (r[0],r[1]),(r[0]+r[2],r[1]+r[3]),(255,0,0),3)
+    cv2.imwrite(os.path.join(output_dir, 'full_im_roi.png'),im_roi)
+    cv2.imwrite(os.path.join(output_dir, 'im_roi.png'),im_out)
+    return im_out,r
+
+def select_roi(image, output_dir):
+    recrop = True
+    while recrop == True:
+        cropped_im, r = UI_crop_image(image,output_dir)
+        choices = ['recrop', 'accept crop']
+        msg = 'Would you like to recrop this image?'
+        img_dirs = os.path.join(output_dir,'im_roi.png')
+        reply = easygui.buttonbox(msg, choices = choices, image = img_dirs )
+        if reply == 'accept crop':
+            recrop = False
+    return cropped_im, r
+
+def parameter_analysis_roi(im, seg, params,output_path, file_name,r):
+    seg[seg>0] = 1
+    skel, edges, bp = skeletonize_vm(seg)
+    edge_count, edge_labels = cv2.connectedComponents(edges)
+    im = crop_roi(im, r)
+    seg = crop_roi(seg,r)
+    skel = crop_roi(skel,r)
+    edges = crop_roi(edges,r)
+    edge_labels = crop_roi(edge_labels,r)
+    bp = crop_roi(bp,r)
+    overlay = seg*150+skel*200
+    this_file = file_name.split('_slice')[0]
+    this_slice = file_name.split('_')[-1]
+    out_text = []
+    out_text.append(['ROI_analysis'])
+    if this_file == this_slice:
+        this_slice = ''
+        suffix = '.png'
+    else:
+        suffix = '_'+this_slice+'.png'
+    segment_count = list(range(1, edge_count))
+    if 'vessel density' in params:
+        density = vessel_density_roi(im, seg)
+        out_text_vd = ['vessel density: %.1f' % (density)]
+        out_text.append(out_text_vd)
+    if 'branchpoint density' in params:
+        num_branchpoints, bp_density = branchpoint_density_roi(skel, edges, bp)
+        out_text_bpd = ['branchpoint density: %.1f' % (bp_density), 'Num branchpoints: %.1f' % (num_branchpoints)]
+        out_text.append(out_text_bpd)
+    if 'network length' in params:
+        net_length = network_length(edges)
+        out_text_nl = ['network legnth: %.1f pixels' % (net_length)]
+        out_text.append(out_text_nl)
+    if 'segment length' in params:
+        segment_count, length = vessel_length(edge_labels)
+        pairs = list(zip(segment_count,length))
+        out_text_sl = ['segment length:']
+        out_text_sl.append(pairs)
+        out_text.append(out_text_sl)
+    
+    fname = 'ROI_analysis_'+this_slice+'.txt'
+    new_out = [item for sublist in out_text for item in sublist]
+    np.savetxt(os.path.join(output_path,this_file,fname), new_out, fmt="%s", delimiter = ',')
+    return
+
+def vessel_density_roi(im,label):
+    density = np.zeros_like(im).astype(np.float16)
+    density_array = []
+    label[label>0] = 1
+    im_size = im.shape
+    density = np.sum(label)/(im_size[0]*im_size[1])
+    return density
+
+def branchpoint_density_roi(skel, edges, bp):
+    _, bp_labels = cv2.connectedComponents(bp, connectivity = 8)
+    skel_inds = np.argwhere(skel > 0)
+    num_branchpoints = np.max(bp_labels)
+    im_size = skel.shape
+    bp_density = num_branchpoints/(im_size[0]*im_size[1])
+    return num_branchpoints, bp_density
+
+
 def make_labelled_image(im, seg):
     skel, edges, bp = skeletonize_vm(seg)
     _, edge_labels = cv2.connectedComponents(edges.astype(np.uint8))
@@ -1149,7 +1259,7 @@ def make_labelled_image(im, seg):
             try:
                 midpoint = segment_midpoint(seg_temp)
                 text_placement = [midpoint[1], midpoint[0]]
-                output = cv2.putText(img = output, text = str(i), org=text_placement, fontFace = 3, fontScale = 1, color = (0,255,255))
+                output = cv2.putText(img = output, text = str(i), org=text_placement, fontScale = 1, color = (0,255,255))
             except:
                 print('segment ' + str(i) + ' failed')
            
@@ -1174,8 +1284,8 @@ def vessel_density(im,label, num_tiles_x, num_tiles_y):
             density[x:x+step_x-1,y:y+step_y-1] = tile_val
             density_array.append(tile_val)
             
-            text_placement = [np.round((x+x+step_x-1)/2).astype(np.uint), np.round((y+y+step_y-1)/2).astype(np.uint)]
-            overlay = cv2.putText(img = overlay, text = str(count), org=text_placement, fontFace = 1, fontScale = 1, color = (0,255,255))
+            text_placement = [np.round((y+y+step_y-1)/2).astype(np.uint),np.round((x+x+step_x-1)/2).astype(np.uint)]
+            overlay = cv2.putText(img = overlay, text = str(count), org=text_placement, fontScale = 1, fontFace = cv2.FONT_HERSHEY_SIMPLEX, color = (0,255,255))
     density = density.astype(np.uint16)
     return density, density_array, overlay
 
@@ -1262,7 +1372,26 @@ def load_settings(path):
         all_settings = pickle.load(filehandle)
     return all_settings
 
-
+def cohens_kappa_segmentation(seg1, seg2):
+    seg1[seg1>0] = 1
+    seg2[seg2>0] = 1
+    A=0; B = 0; C = 0; D= 0;
+    for x in range(seg1.shape[0]):
+        for y in range(seg1.shape[1]):
+            i = seg1[x,y]
+            j = seg2[x,y]
+            if i == 1 and j == 1:
+                A+=1
+            if i == 1 and j == 0:
+                B+=1
+            if i == 0 and j == 1:
+                C+=1
+            if i == 0 and j == 0:
+                D+=1
+    P = (A+D)/(A+B+C+D)
+    Pe = (A+B)*(A+C)/(A+B+C+D)**2+ (C+D)*(B+D)/(A+B+C+D)**2
+    k = (P-Pe)/(1-Pe)
+    return k
 
 
 #####################################################################

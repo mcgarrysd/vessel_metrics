@@ -16,6 +16,7 @@ import easygui
 import vessel_metrics as vm
 from PIL import Image, ImageFont, ImageDraw
 import pickle
+import time
 
 opening_msg = 'Would you like to analyze a single image or batch process a full directory?'
 options = ['single image', 'directory', 'cancel']
@@ -123,13 +124,22 @@ if dir_analysis == 'single image':
         seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
         for s,t,u in zip(images_to_analyze, file_names, seg_list):
             vm.parameter_analysis(s,u,params,output_path,t)
+            
+        roi_yn = easygui.ynbox('Would you like to do an ROI analysis?','ROI Analysis')
+        if roi_yn == True:
+            for s,t,u in zip(images_to_analyze, file_names, seg_list):
+                cropped_im,r = vm.select_roi(s,output_path)
+                vm.parameter_analysis_roi(s,u,params,output_path,t,r)
+            
     else:
         img = cv2.imread(path,0)
-        all_settings = [settings, params]
         seg = vm.analyze_single_image(img, file_name, settings, output_path)
         vm.parameter_analysis(img, seg, params, output_path,file_name)
-
-
+        roi_yn = easygui.ynbox('Would you like to do an ROI analysis?','ROI Analysis')
+        if roi_yn == True:
+            cropped_im, r = vm.select_roi(img,output_path)
+            vm.parameter_analysis_roi(img,seg,params,output_path,file_name,r)
+            
 ##################################################################
 # Directory analysis
 
@@ -175,10 +185,15 @@ if dir_analysis == 'directory':
                 images_to_analyze.append(cv2.imread(os.path.join(path,file),0))
                 file_split = file.split('.')[0]
                 file_names.append(file_split)
+            
             seg_list = vm.analyze_images(images_to_analyze, file_names, settings, output_path)
         for s,t,u in zip(images_to_analyze, file_names, seg_list):
             vm.parameter_analysis(s,u,params,output_path,t)
-                
+        roi_yn = easygui.ynbox('Would you like to do an ROI analysis?','ROI Analysis')
+        if roi_yn == True:
+            for s,t,u in zip(images_to_analyze, file_names, seg_list):
+                cropped_im,r = vm.select_roi(s,output_path)
+                vm.parameter_analysis_roi(s,u,params,output_path,t,r)
     else:
         title = 'multiple file types'
         msg = 'multiple file types detected, consolidate your file types'
@@ -187,3 +202,55 @@ if dir_analysis == 'directory':
 if save_ans == True:
     settings_path = os.path.join(output_path,'settings.data')
     vm.save_settings(all_settings, settings_path)
+
+
+# # test im
+# output_dir = '/media/sean/ucalgary/from_home/UI_test/roi_test'
+# im = cv2.imread(path,0) 
+# seg = vm.analyze_single_image(im, file_name, settings, output_path)
+# cropped_im, r = vm.select_roi(im,output_path)
+# seg[seg>0] = 1
+# skel, edges, bp = skeletonize_vm(seg)
+# edge_count, edge_labels = cv2.connectedComponents(edges)
+# im = crop_roi(im, r)
+# seg = crop_roi(seg,r)
+# skel = crop_roi(skel,r)
+# edges = crop_roi(edges,r)
+# edge_labels = crop_roi(edge_labels,r)
+# bp = crop_roi(bp,r)
+# overlay = seg*150+skel*200
+# this_file = file_name.split('_slice')[0]
+# this_slice = file_name.split('_')[-1]
+# out_text = []
+# out_text.append(['ROI_analysis'])
+# if this_file == this_slice:
+#     this_slice = ''
+#     suffix = '.png'
+# else:
+#     suffix = '_'+this_slice+'.png'
+# segment_count = list(range(1, edge_count))
+# if 'vessel density' in params:
+#     density = vessel_density_roi(im, seg)
+#     out_text_vd = ['vessel density: %.1f' % (density)]
+#     out_text.append(out_text_vd)
+# if 'branchpoint density' in params:
+#     num_branchpoints, bp_density = branchpoint_density_roi(skel, edges, bp)
+#     out_text_bpd = ['branchpoint density: %.1f' % (bp_density), 'Num branchpoints: %.1f' % (num_branchpoints)]
+#     out_text.append(out_text_bpd)
+# if 'network length' in params:
+#     net_length = network_length(edges)
+#     out_text_nl = ['network legnth: %.1f pixels' % (net_length)]
+#     out_text.append(out_text_nl)
+# if 'segment length' in params:
+#     _, length = vessel_length(edge_labels)
+#     pairs = list(zip(segment_count,length))
+#     out_text_sl = ['segment length:']
+#     out_text_sl.append(pairs)
+#     out_text.append(out_text_sl)
+
+# fname = 'ROI_analysis_'+this_slice+'.txt'
+# new_out = [item for sublist in out_text for item in sublist]
+# np.savetxt(os.path.join(output_path,this_file,fname), new_out, fmt="%s", delimiter = ',')
+
+# im = cv2.imread('/media/sean/ucalgary/from_home/im_dir_test/im2.png',0)
+
