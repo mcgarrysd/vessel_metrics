@@ -23,6 +23,7 @@ from skimage.filters.ridges import compute_hessian_eigenvalues
 import itertools # fixing skeleton
 from math import dist
 from aicsimageio import AICSImage
+import aicsimageio
 from skimage import data, restoration, util # deprecated preproc
 import timeit
 from skimage.morphology import white_tophat, black_tophat, disk
@@ -659,10 +660,10 @@ def scatter_boxplot(df, group, column, alpha = 0.4):
     plt.figure()   
     plt.boxplot(vals, labels = names, showfliers=False)
     ngroup = len(vals)
-    clevels = np.linspace(0., 1., ngroup)
+    clevels = np.linspace(0., 0.4, ngroup)
 
     for x, val, clevel in zip(xs, vals, clevels):
-        plt.scatter(x, val, c = plt.cm.prism(clevel), alpha = 0.4)
+        plt.scatter(x, val, c = plt.cm.gray(clevel), alpha = 0.4)
 
 
 #########################################################
@@ -1100,10 +1101,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     this_slice = file_name.split('_')[-1]
     if this_file == this_slice:
         this_slice = ''
-        suffix = '.png'
-    else:
-        suffix = '_'+this_slice+'.png'
-    cv2.imwrite(os.path.join(output_path,this_file,'vessel_centerlines_'+this_slice+'.png'),overlay)
+    cv2.imwrite(os.path.join(output_path,file_name,'vessel_centerlines'+this_slice+'.png'),overlay)
     segment_count = list(range(1, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
@@ -1143,6 +1141,7 @@ def crop_roi(im, roi):
 
 def generate_roi(im):
     im_size = im.shape
+    window_size = im_size
     if max(im_size)>1024:
         aspect_ratio = im_size[0]/im_size[1]
         if aspect_ratio>1:
@@ -1151,8 +1150,8 @@ def generate_roi(im):
             window_size = (1024, int(im_size[1]*aspect_ratio))
         elif aspect_ratio == 1:
             window_size = (1024,1024)
-        else:
-            window_size = im_size
+    else:
+        window_size = (im_size[0],im_size[1])
     cv2.namedWindow("Select ROI then space bar", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Select ROI then space bar", window_size[0],window_size[1])
     roi = cv2.selectROI("Select ROI then space bar", im.astype(np.uint8))
@@ -1259,7 +1258,7 @@ def make_labelled_image(im, seg):
             try:
                 midpoint = segment_midpoint(seg_temp)
                 text_placement = [midpoint[1], midpoint[0]]
-                output = cv2.putText(img = output, text = str(i), org=text_placement, fontScale = 1, color = (0,255,255))
+                output = cv2.putText(img = output, text = str(i), org=text_placement, fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 0.5, color = (0,255,255))
             except:
                 print('segment ' + str(i) + ' failed')
            

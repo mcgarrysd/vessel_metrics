@@ -1,0 +1,3 @@
+Requirement already satisfied: aicspylibczi in /home/sean/anaconda3/lib/python3.8/site-packages (3.1.2)
+Requirement already satisfied: fsspec in /home/sean/anaconda3/lib/python3.8/site-packages (2021.8.1)
+Requirement already satisfied: numpy>=1.14.1 in /home/sean/anaconda3/lib/python3.8/site-packages (from aicspylibczi) (1.21.2)
