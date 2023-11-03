@@ -226,18 +226,8 @@ def find_terminal_segments(skel, edge_labels):
             terminal_segments[edge_labels == u] = 1
     return terminal_segments
 
-# Deprecated version of the function using czifile library
-#def preprocess_czi(input_directory,file_name, channel = 0):
-#    with CziFile(input_directory + file_name) as czi:
-#        image_arrays = czi.asarray()
-#
-#    image = np.squeeze(image_arrays)
-#    im_channel = image[channel,:,:,:]
-#    im_channel = normalize_contrast(im_channel)
-#    return im_channel
-
 def preprocess_czi(input_directory,file_name, channel = 0):
-    img = AICSImage(input_directory+file_name)
+    img = AICSImage(input_directory+file_name, reader = aicsimageio.readers.CziReader)
     dims = img.physical_pixel_sizes
     zdim = dims[0]
     ydim = dims[1]
@@ -1101,7 +1091,7 @@ def parameter_analysis(im, seg, params,output_path, file_name):
     this_slice = file_name.split('_')[-1]
     if this_file == this_slice:
         this_slice = ''
-    cv2.imwrite(os.path.join(output_path,file_name,'vessel_centerlines'+this_slice+'.png'),overlay)
+    cv2.imwrite(os.path.join(output_path,this_file,'vessel_centerlines'+this_slice+'.png'),overlay)
     segment_count = list(range(1, edge_count))
     if 'vessel density' in params:
         density_image, density_array, overlay = vessel_density(im, seg, 16,16)
@@ -1163,21 +1153,21 @@ def crop_image(im):
     im_out = crop_roi(im, r)
     return im_out, r
 
-def UI_crop_image(im,output_dir):
+def UI_crop_image(im,output_dir,slice_number=''):
     im_out, r = crop_image(im)
     im_copy = im.copy()
     im_roi = cv2.rectangle(im_copy, (r[0],r[1]),(r[0]+r[2],r[1]+r[3]),(255,0,0),3)
-    cv2.imwrite(os.path.join(output_dir, 'full_im_roi.png'),im_roi)
-    cv2.imwrite(os.path.join(output_dir, 'im_roi.png'),im_out)
+    cv2.imwrite(os.path.join(output_dir, 'full_im_roi'+slice_number+'.png'),im_roi)
+    cv2.imwrite(os.path.join(output_dir, 'im_roi'+slice_number+'.png'),im_out)
     return im_out,r
 
-def select_roi(image, output_dir):
+def select_roi(image, output_dir,slice_number=''):
     recrop = True
     while recrop == True:
-        cropped_im, r = UI_crop_image(image,output_dir)
+        cropped_im, r = UI_crop_image(image,output_dir,slice_number)
         choices = ['recrop', 'accept crop']
         msg = 'Would you like to recrop this image?'
-        img_dirs = os.path.join(output_dir,'im_roi.png')
+        img_dirs = os.path.join(output_dir,'im_roi'+slice_number+'.png')
         reply = easygui.buttonbox(msg, choices = choices, image = img_dirs )
         if reply == 'accept crop':
             recrop = False
@@ -1198,6 +1188,7 @@ def parameter_analysis_roi(im, seg, params,output_path, file_name,r):
     this_slice = file_name.split('_')[-1]
     out_text = []
     out_text.append(['ROI_analysis'])
+    fname = 'ROI_analysis_'+this_slice+'.txt'
     if this_file == this_slice:
         this_slice = ''
         suffix = '.png'
@@ -1218,12 +1209,10 @@ def parameter_analysis_roi(im, seg, params,output_path, file_name,r):
         out_text.append(out_text_nl)
     if 'segment length' in params:
         segment_count, length = vessel_length(edge_labels)
-        pairs = list(zip(segment_count,length))
-        out_text_sl = ['segment length:']
-        out_text_sl.append(pairs)
-        out_text.append(out_text_sl)
+        out_text_sl = list(zip(segment_count, length))
+        sl_fname = 'ROI_analysis_SL'+this_slice+'.txt'
+        np.savetxt(os.path.join(output_path,this_file,sl_fname), out_text_sl, fmt="%s", delimiter = ',')
     
-    fname = 'ROI_analysis_'+this_slice+'.txt'
     new_out = [item for sublist in out_text for item in sublist]
     np.savetxt(os.path.join(output_path,this_file,fname), new_out, fmt="%s", delimiter = ',')
     return
